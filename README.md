@@ -12,6 +12,20 @@ On this computer, `http://localhost:5000` also works. Press Ctrl+C in the window
 
 On Mac/Linux, use `python3` instead of `py`. If port 5000 is busy, run `py app.py --port 5050`.
 
+## Host it on Render
+
+Create a **Web Service** from this repo with these settings:
+
+| Setting | Value |
+|---|---|
+| Language | Python 3 |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn app:app` |
+
+`gunicorn.conf.py` binds to Render's `$PORT` and runs one worker, so progress.json writes don't collide.
+
+Heads-up: on Render's free plan the disk is wiped on every deploy and restart, and free services also shut down after about 15 minutes idle. That means progress.json resets. Everyone who opens the site also shares the same stats.
+
 ## Modes
 
 | Mode | What it does |
