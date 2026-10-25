@@ -1,0 +1,21 @@
+# Pings the site every 14 minutes so Render's free plan doesn't put it to sleep
+# (it sleeps after 15 minutes with no traffic). Free for public repos.
+# To ping a different address, set a repository variable named SITE_URL
+# (Settings -> Secrets and variables -> Actions -> Variables).
+name: Keep site awake
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping /healthz
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: python3 scripts/keepalive.py --once

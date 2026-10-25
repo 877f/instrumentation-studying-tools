@@ -1,100 +1,96 @@
-# Chapter 2 Study Tool
+# Instrumentation Nation
 
-Quiz app for the Electronics Fundamentals Chapter 2 worksheet: the 54 worksheet questions, plus variations of them. It runs on your computer, and you open it from your phone or laptop on the same Wi-Fi.
+Practice problems with worked solutions for our electronics class. It's live at **https://instrumentationnation.com**.
 
-## Run it
+Each chapter has three tabs:
 
-1. Install Flask once: `py -m pip install -r requirements.txt`
-2. Start the server: `py app.py` (or double-click `run.bat`)
-3. Open the **Phone / other device** URL it prints, for example `http://192.168.12.34:5000`
+- **Practice:** quiz yourself in one of three modes:
+  - **Worksheet:** the exact numbers from the sheet
+  - **Variations:** the same questions with new numbers
+  - **Weak spots:** your most-missed questions first
+- **Formulas:** the chapter's formula sheet.
+- **Progress:** what you've mastered, plus a button to practice the questions you missed.
 
-On this computer, `http://localhost:5000` also works. Press Ctrl+C in the window to stop the server.
-
-On Mac/Linux, use `python3` instead of `py`. If port 5000 is busy, run `py app.py --port 5050`.
-
-## Host it on Render
-
-Create a **Web Service** from this repo with these settings:
-
-| Setting | Value |
-|---|---|
-| Language | Python 3 |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `gunicorn app:app` |
-
-`gunicorn.conf.py` binds to Render's `$PORT` and runs one worker, so progress.json writes don't collide.
-
-Heads-up: on Render's free plan the disk is wiped on every deploy and restart, and free services also shut down after about 15 minutes idle. That means progress.json resets. Everyone who opens the site also shares the same stats.
-
-## Modes
-
-| Mode | What it does |
-|---|---|
-| Worksheet | Exact numbers from the sheet, in order. Use it to check your own work. |
-| Variations | Same wording, new random numbers that are easy to work by hand or calculator. |
-| Weak spots | New numbers, picked mostly from templates you have missed. A miss on your last try counts double. |
-
-You can filter by Part (1 to 5), choose 5 / 10 / 20 / All questions, and shuffle.
-
-Each question has a **Hint** button (shows the formula only) and a **Show answer** button (counts as a miss). After you answer, you get the correct answer and a worked solution. A session ends with a summary of the templates you missed, with buttons to retry them.
+Progress is saved in each person's own browser. Nobody else sees it, and the server stores nothing. Progress on your phone and progress on your laptop are tracked separately.
 
 ## Typing answers
 
-Units are optional. Without a unit, the answer is read in the unit shown under the question (C, V, J, A, s, S, Ω, ft, CM, or a count of electrons).
+Units are optional. Without a unit, the answer is read in the unit shown in the answer box.
 
 - These all mean the same thing: `2500`, `2,500`, `2.5e3`, `2.5 x 10^3`, `2.5k`
-- Prefixes work: `556 uA`, `556 µA`, `0.556 mA`, `40 kohm`, `2 Mohm`, `25 uS`
-- Unit case doesn't matter (`5 ms` on a conductance question means 5 mS), except **m vs M**: `m` is milli and `M` is mega
+- Prefixes work: `556 uA`, `0.556 mA`, `40 kohm`, `2 Mohm`, `25 uS`
+- Unit case doesn't matter, except **m vs M**: `m` is milli and `M` is mega
 - Length and time units are converted: `80 yd` counts as 240 ft, `2 min` counts as 120 s
 
-Grading allows 1% error. Answers are shown to 3 significant figures. If you are off by exactly a power of 10, or by a forgotten conversion (×60, ×3600, ×3, ×12, or 6.25 × 10^18), the app says which one.
+Answers within 1% are marked correct, and answers are shown to 3 significant figures. When an answer is off by a power of 10 or by a forgotten conversion, the feedback says which one.
 
-## How ambiguous questions are read
+## Run it locally
+
+```
+py -m pip install -r requirements.txt
+py app.py
+```
+
+Open the URL it prints. Phones on the same Wi-Fi can use the "Phone / other device" address. On Mac or Linux, use `python3` instead of `py`.
+
+## Host it on Render
+
+Create a **Web Service** from this repo:
+
+| Setting | Value |
+|---|---|
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn app:app` |
+
+### Keep it awake
+
+Render's free plan puts the site to sleep after 15 minutes without visitors. The next visitor then waits about a minute for it to wake up. `scripts/keepalive.py` pings `/healthz` every 14 minutes to prevent that. It's 14 rather than 15 because a ping exactly every 15 minutes can arrive just after the site has gone to sleep.
+
+- **Automatic:** `.github/workflows/keepalive.yml` runs the script on GitHub's servers. It's free because the repo is public. To ping a different address, for example your `.onrender.com` URL before the domain works, set a repository variable named `SITE_URL` under Settings → Secrets and variables → Actions → Variables.
+- **From your computer:** `py scripts/keepalive.py`. Add `--url https://...` to ping another address or `--every 10` to change the interval. Press Ctrl+C to stop.
+
+Keeping one service awake all month uses up to 744 of Render's 750 free hours. GitHub may also run scheduled jobs a few minutes late, and it pauses them after 60 days with no commits.
+
+## Add a chapter
+
+1. Copy `chapters/ch02.py` to `chapters/ch03.py`.
+2. In the copy, replace `PARTS`, the `KINDS` (problem types with their solvers), `TEMPLATES` (the worksheet questions) and `FORMULAS` (the formula sheet). At the bottom, set `Chapter("ch3", 3, "Title", ...)`.
+3. In `chapters/__init__.py`, add `ch03` to `CHAPTERS`.
+4. If the chapter needs a new unit, such as watts, add it to `QUANTITIES` in `core/units.py`.
+5. Optionally, add a hand-calculated answer key to `KEYS` in `test_worksheet.py`.
+6. Run `py test_worksheet.py ch3`. It prints every worksheet answer and checks 300 random variations of each question.
+
+The new chapter shows up on the home screen automatically.
+
+## Chapter 2: how ambiguous questions are read
 
 | # | Reading used |
 |---|---|
-| 26, 30 | Electrons are converted to coulombs first (Q = N ÷ 6.25 × 10^18), then t = Q ÷ I. |
-| 32 | "Charge in electrons" is read as the **number of electrons** (2.03 × 10^23). The coulomb answer (32,400 C) is also accepted, with a note. |
-| 3, 21, 30 | 9.36 × 10^20 electrons = 149.76 C, used as written. 9.375 × 10^20 would give exactly 150 C. Both are inside the 1% tolerance. |
+| 26, 30 | Electrons are converted to coulombs first, then t = Q ÷ I. |
+| 32 | "Charge in electrons" is read as the number of electrons (2.03 × 10^23). The coulomb answer, 32,400 C, is also accepted, with a note. |
+| 3, 21, 30 | 9.36 × 10^20 electrons is used as written (149.76 C). 9.375 × 10^20 would give exactly 150 C. Both are inside the 1% tolerance. |
 | 50 | 133 yd = 399 ft, so A = 2074.8 CM. If 133⅓ yd (400 ft) was meant, it's 2080 CM. Both are accepted. |
-| 50, 52 | "Limit resistance to" gives the minimum wire size. "Maximum resistance" gives the longest wire allowed. |
 
-The constants are 6.25 × 10^18 electrons per coulomb, and ρ = 10.4 Ω·CM/ft for copper.
-
-## Check the answer key
+## Tests
 
 ```
-py test_worksheet.py           # all 54 worksheet answers, 3 sig figs, with flags
-py test_worksheet.py --steps   # the same, plus every worked solution
-py test_app.py                 # grader and API tests (uses a temporary progress file)
+py test_worksheet.py           # every worksheet answer to 3 sig figs, with flags (--steps adds worked solutions)
+py test_app.py                 # grader and API tests
 ```
 
-## Progress
+## Phone can't connect (local runs only)
 
-Stats are saved in `progress.json` next to `app.py`: attempts, correct answers, and the last time you saw each template, plus a short session log. To start over, use **See all 54 templates → Reset progress**, or delete the file.
+If the page loads on the computer but the phone times out, the Wi-Fi probably blocks devices from reaching each other. This is common on apartment Wi-Fi. Two workarounds:
 
-## Phone can't connect
-
-If the page loads on the computer but the phone's browser times out, check these causes in order:
-
-1. **Different network.** The phone must be on the same Wi-Fi as the computer, not on mobile data.
-2. **Windows Firewall.** The first time you run the app, Windows may ask whether to allow Python. Click Allow. If you clicked Cancel, open an admin PowerShell and run:
-   `New-NetFirewallRule -DisplayName "Ch2 Study Tool" -Direction Inbound -Protocol TCP -LocalPort 5000 -Action Allow -RemoteAddress LocalSubnet`
-3. **Client isolation.** Managed apartment Wi-Fi often blocks devices on the network from talking to each other, for privacy. The internet still works, but the phone can't reach your computer. You can't turn this off from your side.
-
-Fallbacks when isolation is the problem:
-
-- **Phone hotspot (easiest).** Turn on the phone's hotspot and connect the computer to it. Restart `py app.py` and open the new URL it prints on the phone. The phone is the router here, so nothing blocks it. This uses little or no mobile data, because the traffic stays between the two devices.
-- **Windows Mobile Hotspot.** On the computer, go to Settings → Network & internet → Mobile hotspot → On. Connect the phone to that network and open `http://192.168.137.1:5000`.
-- **USB tethering (Android).** Plug the phone into the computer and turn on Settings → Network → Hotspot & tethering → USB tethering. Restart `py app.py` and use the URL it prints.
-- **Laptop only.** `http://localhost:5000` always works on the computer that runs the server.
+- Connect the computer to your phone's hotspot, run `py app.py` again, and open the new URL it prints.
+- Turn on Windows Mobile Hotspot, connect the phone to it, and open `http://192.168.137.1:5000`.
 
 ## Files
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `app.py` | Flask server, sessions, progress file |
-| `questions.py` | The 54 templates: wording, worksheet numbers, solvers, hints, variation ranges |
-| `grader.py` | Answer parsing (sci notation, prefixes, units) and grading |
-| `static/index.html` | The whole frontend (plain HTML/JS, no build step) |
-| `test_worksheet.py`, `test_app.py` | Answer key printout and tests |
+| `app.py` | Flask server (stateless JSON API) |
+| `chapters/` | One file per chapter: questions, solvers, hints, formula sheet |
+| `core/` | Shared engine: units, number formatting, templates, grading |
+| `static/` | Front end: `index.html`, `app.css`, `app.js` (no build step) |
+| `scripts/keepalive.py` | Pings the site so it stays awake |

@@ -1,21 +1,19 @@
-"""Grader + API smoke tests. Uses a throwaway progress file, never your real one.
+"""Grader + API smoke tests.
 
     py test_app.py
 """
-import json
-import os
 import sys
-import tempfile
 
 import app as server
-import grader
-from questions import BY_ID
+from chapters import BY_ID as CHAPTERS
+from core import grader
 
+CH2 = CHAPTERS["ch2"]
 failures = []
 
 
 def expect(tid, raw, status, contains=None):
-    t = BY_ID[tid]
+    t = CH2.by_id[tid]
     res = grader.check(t, t.worksheet, raw)
     ok = res["status"] == status and (contains is None or contains.lower() in (res["message"] or "").lower())
     if not ok:
@@ -86,8 +84,6 @@ def grader_tests():
 
 
 def api_tests():
-    tmp = tempfile.mkdtemp()
-    server.PROGRESS_FILE = os.path.join(tmp, "progress.json")
     c = server.app.test_client()
 
     def check(cond, msg):
@@ -95,55 +91,52 @@ def api_tests():
             failures.append("API: " + msg)
 
     r = c.get("/")
-    check(r.status_code == 200 and b"Chapter 2 Study Tool" in r.data, "index page")
-    st = c.get("/api/stats").get_json()
-    check(len(st["templates"]) == 54, "stats lists 54 templates")
+    check(r.status_code == 200 and b"Instrumentation Nation" in r.data, "index page")
+    check(c.get("/static/app.js").status_code == 200 and c.get("/static/app.css").status_code == 200, "static files")
+    r = c.get("/healthz")
+    check(r.status_code == 200 and r.data == b"ok", "healthz")
 
-    ws = c.post("/api/session", json={"mode": "worksheet", "parts": [1, 2, 3, 4, 5], "count": "all"}).get_json()
-    qs = ws["questions"]
+    chapters = c.get("/api/chapters").get_json()
+    check([ch["id"] for ch in chapters] == ["ch2"] and chapters[0]["question_count"] == 54, "chapter list")
+    d = c.get("/api/chapters/ch2").get_json()
+    check(len(d["templates"]) == 54 and set(d["parts"]) == {"1", "2", "3", "4", "5"} and d["formulas"], "chapter detail")
+    check(c.get("/api/chapters/nope").status_code == 404, "unknown chapter -> 404")
+
+    def session(**body):
+        return c.post("/api/session", json={"chapter": "ch2", **body})
+
+    qs = session(mode="worksheet", parts=[1, 2, 3, 4, 5], count="all").get_json()["questions"]
     check([q["template_id"] for q in qs] == list(range(1, 55)), "worksheet session = 1..54 in order")
-    check(all(q["params"] == BY_ID[q["template_id"]].worksheet for q in qs), "worksheet numbers unchanged")
+    check(all(q["params"] == CH2.by_id[q["template_id"]].worksheet for q in qs), "worksheet numbers unchanged")
+    check(all(q["chapter"] == "ch2" for q in qs), "questions carry their chapter")
 
-    var = c.post("/api/session", json={"mode": "variations", "parts": [5], "count": 5, "shuffle": True}).get_json()
-    check(len(var["questions"]) == 5 and all(q["part"] == 5 for q in var["questions"]), "variations part filter")
-
-    weak = c.post("/api/session", json={"mode": "weak", "parts": [1, 2, 3, 4, 5], "count": 10}).get_json()
-    check(len({q["template_id"] for q in weak["questions"]}) == 10, "weak spots gives 10 distinct templates")
-
-    check(c.post("/api/session", json={"mode": "worksheet", "parts": []}).status_code == 400, "no parts -> 400")
+    var = session(mode="variations", parts=[5], count=5, shuffle=True).get_json()["questions"]
+    check(len(var) == 5 and all(q["part"] == 5 for q in var), "variations part filter")
+    weak = session(mode="weak", parts=[1, 2, 3, 4, 5], count=10).get_json()["questions"]
+    check(len({q["template_id"] for q in weak}) == 10, "weak spots gives 10 distinct templates")
+    ids = session(mode="variations", template_ids=[13, 27], count="all").get_json()["questions"]
+    check(sorted(q["template_id"] for q in ids) == [13, 27], "template_ids session (retry missed)")
+    check(session(mode="worksheet", parts=[]).status_code == 400, "no parts -> 400")
+    check(c.post("/api/session", json={"chapter": "nope", "parts": [1]}).status_code == 400, "bad chapter -> 400")
 
     q13 = qs[12]
-    body = {"template_id": 13, "params": q13["params"], "uid": "u1", "answer": "9 J"}
-    check(c.post("/api/check", json=body).get_json()["status"] == "correct", "check correct")
-    c.post("/api/check", json=body)  # same uid again: must not double count
-    s = c.get("/api/stats").get_json()["templates"][12]
-    check(s["attempts"] == 1 and s["correct"] == 1, f"dedupe by uid (got {s['attempts']}/{s['correct']})")
-
-    c.post("/api/check", json={**body, "uid": "u2", "answer": "90"})
-    c.post("/api/check", json={**body, "uid": "u3", "answer": "??"})       # unparsed: not counted
-    c.post("/api/reveal", json={"template_id": 13, "params": q13["params"], "uid": "u4"})
-    s = c.get("/api/stats").get_json()["templates"][12]
-    check(s["attempts"] == 3 and s["correct"] == 1 and s["last_correct"] is False and s["last_seen"],
-          f"miss + reveal recorded, unparsed ignored (got {s})")
-
-    check(c.post("/api/check", json={"template_id": 13, "params": {"V": 0, "N": 1}, "answer": "1"}).status_code == 400,
+    body = {"chapter": "ch2", "template_id": 13, "params": q13["params"]}
+    check(c.post("/api/check", json={**body, "answer": "9 J"}).get_json()["status"] == "correct", "check correct")
+    check(c.post("/api/check", json={**body, "answer": "90"}).get_json()["status"] == "incorrect", "check wrong")
+    check(c.post("/api/reveal", json=body).get_json()["status"] == "revealed", "reveal")
+    check(c.post("/api/check", json={**body, "params": {"V": 0, "N": 1}, "answer": "1"}).status_code == 400,
           "bad params -> 400")
+    check(c.post("/api/check", json={**body, "chapter": "nope", "answer": "9"}).status_code == 400,
+          "check with bad chapter -> 400")
 
-    # Weak spots should now favour #13 inside Part 2.
-    for i in range(6):
-        c.post("/api/check", json={**body, "uid": f"m{i}", "answer": "1"})
+    # Weak spots should favour #13 inside Part 2 when the browser reports it as missed.
+    stats = {"13": {"attempts": 7, "correct": 1, "last_correct": False}}
     hits = sum(13 in [q["template_id"] for q in
-                      c.post("/api/session", json={"mode": "weak", "parts": [2], "count": 3}).get_json()["questions"]]
+                      session(mode="weak", parts=[2], count=3, stats=stats).get_json()["questions"]]
                for _ in range(60))
     check(hits >= 40, f"weak spots favours missed template (#13 picked in {hits}/60 sessions)")
-
-    c.post("/api/session/complete", json={"mode": "worksheet", "answered": 3, "correct": 1, "missed": [13, 27]})
-    with open(server.PROGRESS_FILE, encoding="utf-8") as f:
-        saved = json.load(f)
-    check(saved["templates"]["13"]["attempts"] == 9 and len(saved["sessions"]) == 1, "progress.json contents")
-
-    c.post("/api/progress/reset", json={})
-    check(c.get("/api/stats").get_json()["templates"][12]["attempts"] == 0, "reset clears stats")
+    check(session(mode="weak", parts=[2], count=3, stats={"x": "junk", "5": None}).status_code == 200,
+          "junk stats ignored")
 
 
 def main():

@@ -1,110 +1,23 @@
-"""The 54 Chapter 2 worksheet templates: wording, worksheet numbers, solvers,
-hints, and random-variation generators.
+"""Chapter 2: charge, voltage, current, conductance and copper-wire resistance.
 
-Every template keeps its worksheet wording; only the numbers change in
-Variations / Weak spots mode.
+The 54 worksheet questions. Each keeps its worksheet wording; Variations and
+Weak spots swap in new numbers from the short lists below.
 """
 import math
-from decimal import Decimal, ROUND_HALF_UP
+
+from core.fmt import fmt_answer, g, plural
+from core.template import Chapter, Kind, Part, Template
 
 E_PER_C = 6.25e18   # electrons per coulomb
 RHO_CU = 10.4       # copper, ohm-circular-mils per foot
 EC = "6.25 × 10^18"
 
 PARTS = {
-    1: "Coulombs and Electrons",
-    2: "Voltage from Coulombs and Joules",
-    3: "Electrical Current from Coulombs and Time",
-    4: "Conductance and Resistance",
-    5: "Copper Wire Problems",
-}
-
-# quantity key -> (label shown to the user, base unit symbol)
-QUANTITIES = {
-    "charge": ("charge", "C"),
-    "electrons": ("number of electrons", "electrons"),
-    "voltage": ("voltage", "V"),
-    "energy": ("energy", "J"),
-    "current": ("current", "A"),
-    "time": ("time", "s"),
-    "conductance": ("conductance", "S"),
-    "resistance": ("resistance", "Ω"),
-    "length": ("length", "ft"),
-    "area": ("cross-section area", "CM"),
-}
-
-# Quantities whose answers also get an engineering-prefix form, e.g. "(= 556 µA)".
-ENG_QUANTITIES = {"current", "conductance", "resistance"}
-ENG_PREFIX = {-12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G"}
-
-
-# ---------------------------------------------------------------- formatting
-
-def round_sig(x, sig=3):
-    """Round to `sig` significant figures, half-up (2.275 -> 2.28), as a Decimal."""
-    d = Decimal(repr(float(x)))
-    if d == 0:
-        return d
-    return d.quantize(Decimal(1).scaleb(d.adjusted() - sig + 1), rounding=ROUND_HALF_UP)
-
-
-def _plain(d):
-    s = format(d, "f")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
-
-
-def fmt_num(x, sig=3):
-    """`sig` significant figures; scientific (a × 10^n) when very large or small."""
-    if x == 0:
-        return "0"
-    d = round_sig(x, sig)
-    exp = d.adjusted()
-    if -3 <= exp < 6:
-        return _plain(d)
-    return f"{_plain(d.scaleb(-exp))} × 10^{exp}"
-
-
-def fmt_sci(x, sig=6):
-    d = round_sig(x, sig)
-    exp = d.adjusted()
-    return f"{_plain(d.scaleb(-exp))} × 10^{exp}"
-
-
-def fmt_eng(x, unit, sig=3):
-    d = round_sig(x, sig)
-    exp3 = max(-12, min(9, (d.adjusted() // 3) * 3))
-    return f"{_plain(d.scaleb(-exp3))} {ENG_PREFIX[exp3]}{unit}"
-
-
-def fmt_answer(x, quantity):
-    """Final answer to 3 sig figs, plus a prefixed form for A / S / Ω."""
-    unit = QUANTITIES[quantity][1]
-    text = f"{fmt_num(x)} {unit}"
-    if quantity in ENG_QUANTITIES and not (quantity == "resistance" and abs(x) < 1000):
-        eng = fmt_eng(x, unit)
-        if eng != text:
-            text += f" (= {eng})"
-    return text
-
-
-def g(x):
-    """Intermediate values in worked solutions: 5 sig figs."""
-    return fmt_num(x, 5)
-
-
-def _plural(value, singular, plural):
-    return f"{fmt_num(value, 6)} {singular if value == 1 else plural}"
-
-
-TIME_WORDS = {"s": ("second", "seconds"), "min": ("minute", "minutes"), "hr": ("hour", "hours")}
-
-FIELD_FORMATS = {
-    "num": lambda v, cfg: fmt_num(v, 6),
-    "sci": lambda v, cfg: fmt_sci(v),
-    "ohms": lambda v, cfg: _plural(v, "ohm", "ohms"),
-    "time": lambda v, cfg: _plural(v, *TIME_WORDS[cfg["tunit"]]),
+    1: Part("Coulombs and Electrons", "Charge"),
+    2: Part("Voltage from Coulombs and Joules", "Voltage"),
+    3: Part("Electrical Current from Coulombs and Time", "Current"),
+    4: Part("Conductance and Resistance", "Conductance"),
+    5: Part("Copper Wire Problems", "Copper wire"),
 }
 
 
@@ -301,9 +214,19 @@ def rand_electrons(rng):
     return rng.choice(Q_FOR_N) * E_PER_C
 
 
-def _vq(rng):
+def _vqw(rng):
     V, Q = rng.choice(V_SET), rng.choice(Q_P2)
     return V, Q, round(V * Q, 6)
+
+
+def gen_v_from_wq(rng, cfg):
+    _, Q, W = _vqw(rng)
+    return {"W": W, "Q": Q}
+
+
+def gen_v_and_w(rng, cfg):
+    V, _, W = _vqw(rng)
+    return {"V": V, "W": W}
 
 
 def gen_v_from_wn(rng, cfg):
@@ -319,69 +242,85 @@ def gen_i_from_qt(rng, cfg):
     return {"Q": round(I * ts, 6), "t": t}
 
 
-class Kind:
-    def __init__(self, quantity, fields, hint, gen, solve, electrons=False, reciprocal=False):
-        self.quantity = quantity
-        self.fields = fields          # param -> display format
-        self.hint = hint              # str or fn(cfg) -> str
-        self.gen = gen                # fn(rng, cfg) -> params
-        self.solve = solve            # fn(params, cfg) -> (answer, steps)
-        self.electrons = electrons    # electrons <-> coulombs conversion involved
-        self.reciprocal = reciprocal  # answer is 1/x of a given
+def gen_i_and_t(rng, cfg):
+    return {"I": rng.choice(I_SET), "t": rng.choice(T_SETS[cfg["tunit"]])}
+
+
+# ---------------------------------------------------------- common slips
+
+def slips(electrons=False):
+    """Conversion factors students commonly drop, checked when an answer is wrong."""
+    def f(cfg):
+        out = []
+        if electrons:
+            out.append((E_PER_C, "Off by a factor of 6.25 × 10^18: electrons and coulombs got mixed up. "
+                                 "Electrons → coulombs is ÷ 6.25 × 10^18; coulombs → electrons is ×."))
+        if cfg.get("tunit") == "min":
+            out.append((60, "Off by a factor of 60: check the minutes → seconds conversion (1 min = 60 s)."))
+        if cfg.get("tunit") == "hr":
+            out.append((3600, "Off by a factor of 3600: check the hours → seconds conversion (1 hr = 3600 s)."))
+            out.append((60, "Off by a factor of 60: 1 hr is 3600 s, not 60 s."))
+        if cfg.get("lunit") == "yd":
+            out.append((3, "Off by a factor of 3: convert yards to feet first (1 yd = 3 ft)."))
+        if cfg.get("lunit") == "in":
+            out.append((12, "Off by a factor of 12: convert inches to feet first (1 ft = 12 in)."))
+        return out
+    return f
 
 
 KINDS = {
     "n_to_q": Kind("charge", {"N": "sci"}, "Q = N ÷ (6.25 × 10^18 electrons per coulomb)",
-                   lambda r, c: {"N": rand_electrons(r)}, solve_n_to_q, electrons=True),
+                   lambda r, c: {"N": rand_electrons(r)}, solve_n_to_q, slips(electrons=True)),
     "q_to_n": Kind("electrons", {"Q": "num"}, "N = Q × 6.25 × 10^18 electrons per coulomb",
-                   lambda r, c: {"Q": r.choice(Q_GIVEN)}, solve_q_to_n, electrons=True),
-    "v_from_wq": Kind("voltage", {"W": "num", "Q": "num"}, "V = W ÷ Q",
-                      lambda r, c: (lambda v, q, w: {"W": w, "Q": q})(*_vq(r)), solve_v_from_wq),
+                   lambda r, c: {"Q": r.choice(Q_GIVEN)}, solve_q_to_n, slips(electrons=True)),
+    "v_from_wq": Kind("voltage", {"W": "num", "Q": "num"}, "V = W ÷ Q", gen_v_from_wq, solve_v_from_wq, slips()),
     "w_from_vq": Kind("energy", {"V": "num", "Q": "num"}, "W = V × Q",
-                      lambda r, c: {"V": r.choice(V_SET), "Q": r.choice(Q_P2)}, solve_w_from_vq),
+                      lambda r, c: {"V": r.choice(V_SET), "Q": r.choice(Q_P2)}, solve_w_from_vq, slips()),
     "w_from_vn": Kind("energy", {"V": "num", "N": "sci"},
                       "First convert electrons to coulombs: Q = N ÷ 6.25 × 10^18. Then W = V × Q",
-                      lambda r, c: {"V": r.choice(V_SET), "N": rand_electrons(r)}, solve_w_from_vn, electrons=True),
+                      lambda r, c: {"V": r.choice(V_SET), "N": rand_electrons(r)}, solve_w_from_vn,
+                      slips(electrons=True)),
     "q_from_vw": Kind("charge", {"V": "num", "W": "num"}, "V = W ÷ Q, so Q = W ÷ V",
-                      lambda r, c: (lambda v, q, w: {"V": v, "W": w})(*_vq(r)), solve_q_from_vw),
+                      gen_v_and_w, solve_q_from_vw, slips()),
     "v_from_wn": Kind("voltage", {"W": "num", "N": "sci"},
                       "First convert electrons to coulombs: Q = N ÷ 6.25 × 10^18. Then V = W ÷ Q",
-                      gen_v_from_wn, solve_v_from_wn, electrons=True),
+                      gen_v_from_wn, solve_v_from_wn, slips(electrons=True)),
     "n_from_vw": Kind("electrons", {"V": "num", "W": "num"}, "Q = W ÷ V, then N = Q × 6.25 × 10^18",
-                      lambda r, c: (lambda v, q, w: {"V": v, "W": w})(*_vq(r)), solve_n_from_vw, electrons=True),
+                      gen_v_and_w, solve_n_from_vw, slips(electrons=True)),
     "i_from_qt": Kind("current", {"Q": "num", "t": "time"},
                       lambda c: f"I = Q ÷ t, with t in seconds{TIME_HINT[c['tunit']]}",
-                      gen_i_from_qt, solve_i_from_qt),
+                      gen_i_from_qt, solve_i_from_qt, slips()),
     "q_from_it": Kind("charge", {"I": "num", "t": "time"},
                       lambda c: f"Q = I × t, with t in seconds{TIME_HINT[c['tunit']]}",
-                      lambda r, c: {"I": r.choice(I_SET), "t": r.choice(T_SETS[c["tunit"]])}, solve_q_from_it),
+                      gen_i_and_t, solve_q_from_it, slips()),
     "t_from_ni": Kind("time", {"N": "sci", "I": "num"}, "Q = N ÷ 6.25 × 10^18, then t = Q ÷ I",
-                      lambda r, c: {"N": rand_electrons(r), "I": r.choice(I_SET)}, solve_t_from_ni, electrons=True),
+                      lambda r, c: {"N": rand_electrons(r), "I": r.choice(I_SET)}, solve_t_from_ni,
+                      slips(electrons=True)),
     "i_from_nt": Kind("current", {"N": "sci", "t": "time"},
                       lambda c: f"Q = N ÷ 6.25 × 10^18, t in seconds{TIME_HINT[c['tunit']]}, then I = Q ÷ t",
                       lambda r, c: {"N": rand_electrons(r), "t": r.choice(T_SETS[c["tunit"]])},
-                      solve_i_from_nt, electrons=True),
+                      solve_i_from_nt, slips(electrons=True)),
     "n_from_it": Kind("electrons", {"I": "num", "t": "time"},
                       lambda c: f"Q = I × t (t in seconds{TIME_HINT[c['tunit']]}), then N = Q × 6.25 × 10^18",
-                      lambda r, c: {"I": r.choice(I_SET), "t": r.choice(T_SETS[c["tunit"]])},
-                      solve_n_from_it, electrons=True),
+                      gen_i_and_t, solve_n_from_it, slips(electrons=True)),
     "t_from_iq": Kind("time", {"I": "num", "Q": "num"}, "I = Q ÷ t, so t = Q ÷ I",
                       lambda r, c: {"I": r.choice(I_SET), "Q": r.choice([5, 10, 12, 15, 20, 25, 30, 40, 50, 60, 100])},
-                      solve_t_from_iq),
+                      solve_t_from_iq, slips()),
     "g_from_r": Kind("conductance", {"R": "num"},
                      lambda c: "G = 1 ÷ R, with R in ohms" + {"": "", "k": " (1 kΩ = 10^3 Ω)", "M": " (1 MΩ = 10^6 Ω)"}[c["prefix"]],
-                     lambda r, c: {"R": r.choice(R_SETS[c["prefix"]])}, solve_g_from_r, reciprocal=True),
+                     lambda r, c: {"R": r.choice(R_SETS[c["prefix"]])}, solve_g_from_r, slips(), reciprocal=True),
     "r_from_g": Kind("resistance", {"G": "num"},
                      lambda c: "R = 1 ÷ G, with G in siemens" + {"u": " (1 µS = 10^-6 S)", "n": " (1 nS = 10^-9 S)", "m": " (1 mS = 10^-3 S)"}[c["prefix"]],
-                     lambda r, c: {"G": r.choice(G_SETS[c["prefix"]])}, solve_r_from_g, reciprocal=True),
+                     lambda r, c: {"G": r.choice(G_SETS[c["prefix"]])}, solve_r_from_g, slips(), reciprocal=True),
     "wire_length": Kind("length", {"R": "ohms", "A": "num"}, "R = ρL ÷ A, so L = R × A ÷ ρ (ρ = 10.4 Ω·CM per foot)",
-                        lambda r, c: {"R": r.choice(R5), "A": r.choice(A5)}, solve_wire_length),
+                        lambda r, c: {"R": r.choice(R5), "A": r.choice(A5)}, solve_wire_length, slips()),
     "wire_area": Kind("area", {"L": "num", "R": "ohms"},
                       lambda c: f"R = ρL ÷ A, so A = ρL ÷ R (ρ = 10.4 Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
-                      lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "R": r.choice(R5)}, solve_wire_area),
+                      lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "R": r.choice(R5)}, solve_wire_area, slips()),
     "wire_resistance": Kind("resistance", {"L": "num", "A": "num"},
                             lambda c: f"R = ρL ÷ A (ρ = 10.4 Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
-                            lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "A": r.choice(A5)}, solve_wire_resistance),
+                            lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "A": r.choice(A5)},
+                            solve_wire_resistance, slips()),
 }
 
 
@@ -400,15 +339,22 @@ def _note_electron_time(p):
             "then t = Q ÷ I. Dividing the electron count straight by the current doesn't give seconds."] + _note_936(p)
 
 
+def _coulombs_32(p):
+    return p["I"] * _to_seconds(p["t"], "hr")[0]
+
+
 def _note_32(p):
-    Q = p["I"] * _to_seconds(p["t"], "hr")[0]
     return ["Interpretation: \"charge in electrons\" is read as the NUMBER of electrons (N = Q × 6.25 × 10^18). "
-            f"If your teacher wants coulombs instead, the charge is {fmt_answer(Q, 'charge')}. "
-            "This app accepts that answer too and tells you which reading it matched."]
+            f"If your teacher wants coulombs instead, the charge is {fmt_answer(_coulombs_32(p), 'charge')}. "
+            "That answer is accepted too, with a note saying which reading it matched."]
+
+
+def _alt_32(p):
+    return [{"value": _coulombs_32(p), "quantity": "charge", "label": "the charge in coulombs"}]
 
 
 def _note_50(p):
-    notes = [f"\"Limit resistance to {_plural(p['R'], 'ohm', 'ohms')}\" makes this the minimum wire size: "
+    notes = [f"\"Limit resistance to {plural(p['R'], 'ohm', 'ohms')}\" makes this the minimum wire size: "
              "more circular mils means less resistance."]
     if p["L"] == 133:
         notes.append("133 yd = 399 ft. If the sheet meant 133⅓ yd (= 400 ft), the answer is 2080 CM. "
@@ -421,86 +367,11 @@ NOTE_52 = ["\"Maximum resistance\" makes this the longest wire allowed: any shor
 
 # --------------------------------------------------------------- templates
 
-class Template:
-    def __init__(self, id, part, text, kind, tunit=None, lunit=None, prefix=None, note=None,
-                 alt_coulombs=False, **worksheet):
-        self.id = id
-        self.part = part
-        self.text = text
-        self.kind_name = kind
-        self.kind = KINDS[kind]
-        self.cfg = {"tunit": tunit, "lunit": lunit, "prefix": prefix}
-        self.note = note
-        self.alt_coulombs = alt_coulombs
-        self.worksheet = worksheet
-
-    @property
-    def quantity(self):
-        return self.kind.quantity
-
-    def render(self, p):
-        vals = {k: FIELD_FORMATS[f](p[k], self.cfg) for k, f in self.kind.fields.items()}
-        return self.text.format(**vals)
-
-    def generate(self, rng):
-        for _ in range(10):
-            p = self.kind.gen(rng, self.cfg)
-            if p != self.worksheet:
-                break
-        return p
-
-    def solve(self, p):
-        return self.kind.solve(p, self.cfg)
-
-    def hint(self):
-        h = self.kind.hint
-        return h(self.cfg) if callable(h) else h
-
-    def notes(self, p):
-        if self.note is None:
-            return []
-        return list(self.note(p)) if callable(self.note) else list(self.note)
-
-    def alternates(self, p):
-        """Other accepted readings: list of (value, quantity, label)."""
-        if self.alt_coulombs:
-            return [(p["I"] * _to_seconds(p["t"], self.cfg["tunit"])[0], "charge", "the charge in coulombs")]
-        return []
-
-    def slips(self):
-        """Conversion factors a student commonly drops: list of (factor, message)."""
-        out = []
-        if self.kind.electrons:
-            out.append((E_PER_C, "Off by a factor of 6.25 × 10^18: electrons and coulombs got mixed up. "
-                                 "Electrons → coulombs is ÷ 6.25 × 10^18; coulombs → electrons is ×."))
-        if self.cfg["tunit"] == "min":
-            out.append((60, "Off by a factor of 60: check the minutes → seconds conversion (1 min = 60 s)."))
-        if self.cfg["tunit"] == "hr":
-            out.append((3600, "Off by a factor of 3600: check the hours → seconds conversion (1 hr = 3600 s)."))
-            out.append((60, "Off by a factor of 60: 1 hr is 3600 s, not 60 s."))
-        if self.cfg["lunit"] == "yd":
-            out.append((3, "Off by a factor of 3: convert yards to feet first (1 yd = 3 ft)."))
-        if self.cfg["lunit"] == "in":
-            out.append((12, "Off by a factor of 12: convert inches to feet first (1 ft = 12 in)."))
-        return out
-
-    def question(self, params, varied):
-        label, unit = QUANTITIES[self.quantity]
-        return {
-            "template_id": self.id,
-            "part": self.part,
-            "part_title": PARTS[self.part],
-            "text": self.render(params),
-            "params": params,
-            "hint": self.hint(),
-            "quantity": self.quantity,
-            "quantity_label": label,
-            "unit": unit,
-            "varied": varied,
-        }
+def T(id, part, text, kind, tunit=None, lunit=None, prefix=None, note=None, alternates=None, **worksheet):
+    return Template(id, part, text, KINDS[kind], worksheet,
+                    cfg={"tunit": tunit, "lunit": lunit, "prefix": prefix}, note=note, alternates=alternates)
 
 
-T = Template
 TEMPLATES = [
     # Part 1: Coulombs and Electrons
     T(1, 1, "Calculate the charge in coulombs for {N} electrons", "n_to_q", N=6.25e18),
@@ -539,7 +410,7 @@ TEMPLATES = [
       note=_note_electron_time, N=9.36e20, I=3),
     T(31, 3, "Calculate the current when {N} electrons pass through in {t}", "i_from_nt", tunit="min", N=7.5e19, t=30),
     T(32, 3, "Find the charge in electrons if {I} amperes flow for {t}", "n_from_it", tunit="hr",
-      note=_note_32, alt_coulombs=True, I=6, t=1.5),
+      note=_note_32, alternates=_alt_32, I=6, t=1.5),
     T(33, 3, "What is the current if {N} electrons flow in {t}?", "i_from_nt", tunit="min", N=4.375e19, t=20),
     T(34, 3, "Calculate the time in seconds when {I} amperes moves {Q} coulombs", "t_from_iq", I=2, Q=25),
     # Part 4: Conductance and Resistance
@@ -566,5 +437,40 @@ TEMPLATES = [
     T(54, 5, "Calculate the circular mils needed for a {L}-yard copper wire to have a resistance of {R}", "wire_area", lunit="yd", L=60, R=1),
 ]
 
-BY_ID = {t.id: t for t in TEMPLATES}
-assert sorted(BY_ID) == list(range(1, 55))
+
+# ------------------------------------------------------------ formula sheet
+
+FORMULAS = [
+    {"title": "Constants and conversions", "items": [
+        {"name": "Electrons per coulomb", "formula": "1 C = 6.25 × 10^18 electrons"},
+        {"name": "Copper resistivity", "formula": "ρ = 10.4 Ω·CM/ft"},
+        {"name": "Time", "formula": "1 min = 60 s · 1 hr = 3600 s"},
+        {"name": "Length", "formula": "1 yd = 3 ft · 1 ft = 12 in"},
+        {"name": "Prefixes", "formula": "k = 10^3 · M = 10^6 · m = 10^-3 · µ = 10^-6 · n = 10^-9"},
+    ]},
+    {"title": "Part 1 · Charge", "items": [
+        {"name": "Charge from electrons", "formula": "Q = N ÷ 6.25 × 10^18", "note": "Q in coulombs (C)"},
+        {"name": "Electrons from charge", "formula": "N = Q × 6.25 × 10^18"},
+    ]},
+    {"title": "Part 2 · Voltage", "items": [
+        {"name": "Voltage", "formula": "V = W ÷ Q", "note": "W in joules, Q in coulombs"},
+        {"name": "Energy", "formula": "W = V × Q"},
+        {"name": "Charge", "formula": "Q = W ÷ V", "note": "Charge given in electrons? Convert to coulombs first."},
+    ]},
+    {"title": "Part 3 · Current", "items": [
+        {"name": "Current", "formula": "I = Q ÷ t", "note": "t in seconds"},
+        {"name": "Charge", "formula": "Q = I × t"},
+        {"name": "Time", "formula": "t = Q ÷ I"},
+    ]},
+    {"title": "Part 4 · Conductance", "items": [
+        {"name": "Conductance", "formula": "G = 1 ÷ R", "note": "G in siemens (S), R in ohms"},
+        {"name": "Resistance", "formula": "R = 1 ÷ G", "note": "Convert prefixes to plain S or Ω first."},
+    ]},
+    {"title": "Part 5 · Copper wire", "items": [
+        {"name": "Resistance", "formula": "R = ρL ÷ A", "note": "L in feet, A in circular mils"},
+        {"name": "Length", "formula": "L = R × A ÷ ρ"},
+        {"name": "Area", "formula": "A = ρL ÷ R"},
+    ]},
+]
+
+CHAPTER = Chapter("ch2", 2, "Charge, Voltage, Current & Resistance", PARTS, TEMPLATES, FORMULAS)

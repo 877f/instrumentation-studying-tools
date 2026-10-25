@@ -1,6 +1,3 @@
 __pycache__/
 *.pyc
-progress.json
-progress.json.tmp
-progress.json.broken-*
 .venv/
