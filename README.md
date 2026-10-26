@@ -48,8 +48,8 @@ Render's free plan puts the site to sleep after 15 minutes without visitors. The
 
 There are two ways to run it on a schedule:
 
-- **GitHub Actions (runs 24/7, free for public repos).** The job is in `.github/workflows/keepalive.yml` and is **currently paused** because the GitHub account is locked over billing. After fixing billing, turn it on with `gh workflow enable keepalive.yml --repo 877f/instrumentation-studying-tools`.
-- **Windows Task Scheduler (runs only while the PC is on).** A task named "Instrumentation Nation keep-awake" runs `pyw scripts\keepalive.py --once --log scripts\keepalive.log` every 10 minutes with no popup window, including on battery.
+- **GitHub Actions (main, runs 24/7, free for public repos).** The job is in `.github/workflows/keepalive.yml`. See its runs on the repo's Actions tab. To pause it, run `gh workflow disable keepalive.yml --repo 877f/instrumentation-studying-tools`; use `enable` to turn it back on.
+- **Windows Task Scheduler (backup, runs only while the PC is on).** A task named "Instrumentation Nation keep-awake" runs `pyw scripts\keepalive.py --once --log scripts\keepalive.log` every 10 minutes with no popup window, including on battery. It covers times when GitHub's scheduler runs late.
   - Check that it's working in `scripts\keepalive.log`.
   - Remove it with `Unregister-ScheduledTask -TaskName "Instrumentation Nation keep-awake"`.
 
