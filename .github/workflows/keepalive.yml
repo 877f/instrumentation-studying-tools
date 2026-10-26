@@ -1,4 +1,4 @@
-# Pings the site every 14 minutes so Render's free plan doesn't put it to sleep
+# Pings the site every 10 minutes so Render's free plan doesn't put it to sleep
 # (it sleeps after 15 minutes with no traffic). Free for public repos.
 # To ping a different address, set a repository variable named SITE_URL
 # (Settings -> Secrets and variables -> Actions -> Variables).
@@ -6,7 +6,7 @@ name: Keep site awake
 
 on:
   schedule:
-    - cron: "*/14 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 jobs:
