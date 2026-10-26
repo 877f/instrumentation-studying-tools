@@ -75,7 +75,9 @@ The new chapter shows up on the home screen automatically.
 | 26, 30 | Electrons are converted to coulombs first, then t = Q ÷ I. |
 | 32 | "Charge in electrons" is read as the number of electrons (2.03 × 10^23). The coulomb answer, 32,400 C, is also accepted, with a note. |
 | 3, 21, 30 | 9.36 × 10^20 electrons is used as written (149.76 C). 9.375 × 10^20 would give exactly 150 C. Both are inside the 1% tolerance. |
-| 50 | 133 yd = 399 ft, so A = 2074.8 CM. If 133⅓ yd (400 ft) was meant, it's 2080 CM. Both are accepted. |
+| 50 | 133 yd = 399 ft, so A = 2068.8 CM. If 133⅓ yd (400 ft) was meant, it's 2074 CM. Both are accepted. |
+
+Copper resistivity is **ρ = 10.37 Ω·CM/ft**, the value our class uses. It's set in one place, `RHO_CU` in `chapters/ch02.py`, and every answer, worked solution, hint and the formula sheet use it.
 
 ## Tests
 

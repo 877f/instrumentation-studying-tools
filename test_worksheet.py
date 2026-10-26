@@ -19,7 +19,7 @@ from core import grader
 from core.fmt import fmt_answer, fmt_num
 
 E = 6.25e18
-RHO = 10.4
+RHO = 10.37
 
 # Independent answer keys: written straight from the formulas, not via the solvers.
 KEYS = {
@@ -44,7 +44,7 @@ HEADS_UP = {
         21: "Uses 9.36e20 electrons: 748.8 J. With 9.375e20 it would be 750 J (0.16% apart, both accepted).",
         30: "Uses 9.36e20 electrons: 49.92 s. With 9.375e20 it would be 50 s (0.16% apart, both accepted).",
         32: "Wording 'charge in electrons': app answers the NUMBER of electrons; 32,400 C is also accepted.",
-        50: "133 yd = 399 ft -> 2074.8 CM. If 133 1/3 yd (400 ft) was meant: 2080 CM (both accepted).",
+        50: "133 yd = 399 ft -> 2068.8 CM. If 133 1/3 yd (400 ft) was meant: 2074 CM (both accepted).",
     },
 }
 

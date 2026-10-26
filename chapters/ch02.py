@@ -9,7 +9,8 @@ from core.fmt import fmt_answer, g, plural
 from core.template import Chapter, Kind, Part, Template
 
 E_PER_C = 6.25e18   # electrons per coulomb
-RHO_CU = 10.4       # copper, ohm-circular-mils per foot
+RHO_CU = 10.37      # copper, ohm-circular-mils per foot (class value; every ρ shown below comes from here)
+RHO = f"{RHO_CU:g}"
 EC = "6.25 × 10^18"
 
 PARTS = {
@@ -165,22 +166,22 @@ def solve_r_from_g(p, cfg):
 def solve_wire_length(p, cfg):
     L = p["R"] * p["A"] / RHO_CU
     return L, ["Formula: R = ρL ÷ A, so L = R × A ÷ ρ",
-               "ρ for copper = 10.4 Ω·CM per foot, so L comes out in feet",
-               f"L = {g(p['R'])} Ω × {g(p['A'])} CM ÷ 10.4 = {g(L)} ft"]
+               f"ρ for copper = {RHO} Ω·CM per foot, so L comes out in feet",
+               f"L = {g(p['R'])} Ω × {g(p['A'])} CM ÷ {RHO} = {g(L)} ft"]
 
 
 def solve_wire_area(p, cfg):
     ft, conv = _to_feet(p["L"], cfg["lunit"])
     A = RHO_CU * ft / p["R"]
-    return A, conv + ["Formula: R = ρL ÷ A, so A = ρL ÷ R (ρ for copper = 10.4 Ω·CM per foot)",
-                      f"A = 10.4 × {g(ft)} ft ÷ {g(p['R'])} Ω = {g(A)} CM"]
+    return A, conv + [f"Formula: R = ρL ÷ A, so A = ρL ÷ R (ρ for copper = {RHO} Ω·CM per foot)",
+                      f"A = {RHO} × {g(ft)} ft ÷ {g(p['R'])} Ω = {g(A)} CM"]
 
 
 def solve_wire_resistance(p, cfg):
     ft, conv = _to_feet(p["L"], cfg["lunit"])
     R = RHO_CU * ft / p["A"]
-    return R, conv + ["Formula: R = ρL ÷ A (ρ for copper = 10.4 Ω·CM per foot)",
-                      f"R = 10.4 × {g(ft)} ft ÷ {g(p['A'])} CM = {g(R)} Ω"]
+    return R, conv + [f"Formula: R = ρL ÷ A (ρ for copper = {RHO} Ω·CM per foot)",
+                      f"R = {RHO} × {g(ft)} ft ÷ {g(p['A'])} CM = {g(R)} Ω"]
 
 
 # ------------------------------------------------------- variation generators
@@ -312,13 +313,13 @@ KINDS = {
     "r_from_g": Kind("resistance", {"G": "num"},
                      lambda c: "R = 1 ÷ G, with G in siemens" + {"u": " (1 µS = 10^-6 S)", "n": " (1 nS = 10^-9 S)", "m": " (1 mS = 10^-3 S)"}[c["prefix"]],
                      lambda r, c: {"G": r.choice(G_SETS[c["prefix"]])}, solve_r_from_g, slips(), reciprocal=True),
-    "wire_length": Kind("length", {"R": "ohms", "A": "num"}, "R = ρL ÷ A, so L = R × A ÷ ρ (ρ = 10.4 Ω·CM per foot)",
+    "wire_length": Kind("length", {"R": "ohms", "A": "num"}, f"R = ρL ÷ A, so L = R × A ÷ ρ (ρ = {RHO} Ω·CM per foot)",
                         lambda r, c: {"R": r.choice(R5), "A": r.choice(A5)}, solve_wire_length, slips()),
     "wire_area": Kind("area", {"L": "num", "R": "ohms"},
-                      lambda c: f"R = ρL ÷ A, so A = ρL ÷ R (ρ = 10.4 Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
+                      lambda c: f"R = ρL ÷ A, so A = ρL ÷ R (ρ = {RHO} Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
                       lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "R": r.choice(R5)}, solve_wire_area, slips()),
     "wire_resistance": Kind("resistance", {"L": "num", "A": "num"},
-                            lambda c: f"R = ρL ÷ A (ρ = 10.4 Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
+                            lambda c: f"R = ρL ÷ A (ρ = {RHO} Ω·CM per foot, L in feet{LEN_HINT[c['lunit']]})",
                             lambda r, c: {"L": r.choice(L_SETS[c["lunit"]]), "A": r.choice(A5)},
                             solve_wire_resistance, slips()),
 }
@@ -357,8 +358,8 @@ def _note_50(p):
     notes = [f"\"Limit resistance to {plural(p['R'], 'ohm', 'ohms')}\" makes this the minimum wire size: "
              "more circular mils means less resistance."]
     if p["L"] == 133:
-        notes.append("133 yd = 399 ft. If the sheet meant 133⅓ yd (= 400 ft), the answer is 2080 CM. "
-                     "Both are inside the 1% tolerance.")
+        notes.append(f"133 yd = 399 ft. If the sheet meant 133⅓ yd (= 400 ft), the answer is "
+                     f"{g(RHO_CU * 400 / p['R'])} CM. Both are inside the 1% tolerance.")
     return notes
 
 
@@ -443,7 +444,7 @@ TEMPLATES = [
 FORMULAS = [
     {"title": "Constants and conversions", "items": [
         {"name": "Electrons per coulomb", "formula": "1 C = 6.25 × 10^18 electrons"},
-        {"name": "Copper resistivity", "formula": "ρ = 10.4 Ω·CM/ft"},
+        {"name": "Copper resistivity", "formula": f"ρ = {RHO} Ω·CM/ft"},
         {"name": "Time", "formula": "1 min = 60 s · 1 hr = 3600 s"},
         {"name": "Length", "formula": "1 yd = 3 ft · 1 ft = 12 in"},
         {"name": "Prefixes", "formula": "k = 10^3 · M = 10^6 · m = 10^-3 · µ = 10^-6 · n = 10^-9"},

@@ -63,14 +63,15 @@ def grader_tests():
     for raw in ["0.25", "250 ms", "0.25 S", "0.25 sec"]:
         expect(26, raw, "correct")
     # Part 5: tolerance and conversions
-    expect(47, "2.28", "correct")
+    # ρ = 10.37: #47 = 2.2684 Ω, #46 = 2074 CM, #45 = 241.08 ft
     expect(47, "2.27", "correct")
-    expect(47, "27.3", "incorrect", "inches to feet")
-    expect(46, "2080", "correct")
-    expect(46, "2.08k", "correct")
-    expect(46, "2.08 kcmil", "correct")
-    expect(46, "693", "incorrect", "yards to feet")
-    for raw in ["240", "240 ft", "80 yd", "2885 in", "240 FT"]:
+    expect(47, "2.268", "correct")
+    expect(47, "27.2", "incorrect", "inches to feet")
+    expect(46, "2074", "correct")
+    expect(46, "2.07k", "correct")
+    expect(46, "2.07 kcmil", "correct")
+    expect(46, "691", "incorrect", "yards to feet")
+    for raw in ["241", "241 ft", "80.4 yd", "2893 in", "241 FT"]:
         expect(45, raw, "correct")
     expect(18, "17.1", "correct")
     # wrong / unreadable
