@@ -122,7 +122,7 @@ def check_chapter(ch, show_steps):
 
 def main():
     args = [x for x in sys.argv[1:] if not x.startswith("--")]
-    chapters = [BY_ID[x] for x in args] if args else CHAPTERS
+    chapters = [BY_ID[x] for x in args] if args else [c for c in CHAPTERS if c.type == "worksheet"]
     all_problems = {ch.id: check_chapter(ch, "--steps" in sys.argv) for ch in chapters}
 
     print("\nRESULT")

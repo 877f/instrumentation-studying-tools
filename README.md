@@ -2,7 +2,12 @@
 
 Practice problems with worked solutions for our electronics class. It's live at **https://instrumentationnation.com**.
 
-Each chapter has three tabs:
+The home screen lists the study modules. There are two kinds:
+
+- **Worksheet chapters**, such as Chapter 2: numeric problems from a worksheet, explained below.
+- **Formula drills**, such as the Ohm's Law Wheel: you type formulas from memory. See [Ohm's Law Wheel](#ohms-law-wheel).
+
+Each worksheet chapter has three tabs:
 
 - **Practice:** quiz yourself in one of three modes:
   - **Worksheet:** the exact numbers from the sheet
@@ -23,6 +28,27 @@ Units are optional. Without a unit, the answer is read in the unit shown in the 
 - Length and time units are converted: `80 yd` counts as 240 ft, `2 min` counts as 120 s
 
 Answers within 1% are marked correct, and answers are shown to 3 significant figures. When an answer is off by a power of 10 or by a forgotten conversion, the feedback says which one.
+
+## Ohm's Law Wheel
+
+This drill teaches the 12 wheel formulas by deriving them from the two base equations, **V = I × R** and **P = V × I**. Every level is open from the start.
+
+| Level | What you do |
+|---|---|
+| 1 · Transpose V = IR | Solve V = IR for I, for R and for V |
+| 2 · Transpose P = VI | Solve P = VI for V and for I |
+| 3 · Substitute | Combine both equations to get the 6 squared and square-root forms |
+| 4 · Full wheel | "Write I in terms of P and R", picked at random from all 12 |
+| 5 · Numeric | Plug in clean numbers, such as V = 12 V and R = 4 Ω, then find I |
+| Blank wheel | Fill in all 12 slots from memory, grouped by P, I, V and R, with a timer |
+
+How it works:
+
+- **Typing formulas:** these all work: `I = V/R`, `V*R`, `IR`, `sqrt(P/R)`, `√(P/R)`, `P/I^2`, `P/I²`, `(V^2)/R`, `V x I`, `V ÷ R`. The `I =` at the front is optional, and case doesn't matter. `√PR` is read as √(PR), and `√P/R` as √(P) / R.
+- **Checking:** the server uses sympy to test whether your answer is algebraically the same as the right one. It may use only the variables the question names, so "I in terms of V and R" answered with `P/V` is marked wrong. If you type U for voltage, it's accepted with a reminder that our class uses V. If an answer can't be read, the app says what it couldn't read instead of marking it wrong.
+- **Feedback:** a wrong answer shows the right formula and how to derive it from the base equations. The Hint button only says which base equation(s) to start from. A missed question comes back two questions later, up to 3 times.
+- **Stats:** kept in memory only, never saved, and gone when you close the page. The Session summary shows accuracy per level and every formula you missed.
+- **No notes during questions:** the filled-in wheel appears only on results and summary screens.
 
 ## Run it locally
 
@@ -57,16 +83,38 @@ To ping by hand, run `py scripts/keepalive.py`. Add `--url https://...` to ping 
 
 Keeping one service awake all month uses up to 744 of Render's 750 free hours. GitHub may also run scheduled jobs a few minutes late, and it pauses them after 60 days with no commits.
 
-## Add a chapter
+## Add a module
+
+Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `chapters/__init__.py`**. The engine code in `core/` and `static/` doesn't change. Copy the example closest to your new assignment.
+
+### A worksheet chapter (numeric problems), for example Chapter 3
 
 1. Copy `chapters/ch02.py` to `chapters/ch03.py`.
-2. In the copy, replace `PARTS`, the `KINDS` (problem types with their solvers), `TEMPLATES` (the worksheet questions) and `FORMULAS` (the formula sheet). At the bottom, set `Chapter("ch3", 3, "Title", ...)`.
-3. In `chapters/__init__.py`, add `ch03` to `CHAPTERS`.
-4. If the chapter needs a new unit, such as watts, add it to `QUANTITIES` in `core/units.py`.
-5. Optionally, add a hand-calculated answer key to `KEYS` in `test_worksheet.py`.
-6. Run `py test_worksheet.py ch3`. It prints every worksheet answer and checks 300 random variations of each question.
+2. In the copy, replace these:
+   - `PARTS`
+   - `KINDS`: the problem types and their solvers
+   - `TEMPLATES`: the worksheet questions
+   - `FORMULAS`: the formula sheet
+3. At the bottom of the copy, set `Chapter("ch3", 3, "Title", ...)`.
+4. In `chapters/__init__.py`, import `ch03` and add `ch03.CHAPTER` to `CHAPTERS`.
+5. If the chapter needs a new unit, add it to `QUANTITIES` in `core/units.py`. Watts were added this way.
+6. Optionally, add a hand-calculated answer key to `KEYS` in `test_worksheet.py`.
+7. Run `py test_worksheet.py ch3`. It prints every worksheet answer and checks 300 random variations of each question.
 
-The new chapter shows up on the home screen automatically.
+### A formula drill, for example another formula wheel
+
+1. Copy `chapters/ohms_wheel.py` to a new file.
+2. In the copy, replace these:
+   - `VARIABLES`: single letters, each with its unit quantity
+   - the base equations
+   - `FORMULAS`: each with its target, the variables it may use, the formula, and its derivation steps
+   - `LEVELS`: which formulas each level asks, and the question wording
+   - `numeric_values()`: produces a consistent set of values for the numeric level
+3. In `chapters/__init__.py`, import it and add its `MODULE` to `CHAPTERS`.
+4. Start the app. On startup it checks every formula against `numeric_values()`, so a typo in a formula stops it with an error.
+5. Copy `test_wheel.py`, list equivalent spellings for your formulas, and run it.
+
+New modules show up on the home screen automatically, in the order they appear in `CHAPTERS`.
 
 ## Chapter 2: how ambiguous questions are read
 
@@ -83,6 +131,7 @@ Copper resistivity is **ρ = 10.37 Ω·CM/ft**, the value our class uses. It's s
 
 ```
 py test_worksheet.py           # every worksheet answer to 3 sig figs, with flags (--steps adds worked solutions)
+py test_wheel.py               # Ohm's Law Wheel checker: 12 formulas x spellings x variable sets
 py test_app.py                 # grader and API tests
 ```
 
@@ -98,7 +147,7 @@ If the page loads on the computer but the phone times out, the Wi-Fi probably bl
 | Path | Purpose |
 |---|---|
 | `app.py` | Flask server (stateless JSON API) |
-| `chapters/` | One file per chapter: questions, solvers, hints, formula sheet |
-| `core/` | Shared engine: units, number formatting, templates, grading |
-| `static/` | Front end: `index.html`, `app.css`, `app.js` (no build step) |
+| `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`) plus the `CHAPTERS` registry |
+| `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker) |
+| `static/` | Front end: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), no build step |
 | `scripts/keepalive.py` | Pings the site so it stays awake |

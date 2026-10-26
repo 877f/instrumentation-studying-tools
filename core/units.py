@@ -33,6 +33,7 @@ QUANTITIES = {
     "length": Quantity("length", "ft", "feet (ft)",
                        {"ft": 1, "foot": 1, "feet": 1, "'": 1, "yd": 3, "yds": 3, "yard": 3, "yards": 3,
                         "in": 1 / 12, "inch": 1 / 12, "inches": 1 / 12, '"': 1 / 12}, prefixable=False),
+    "power": Quantity("power", "W", "watts (W)", {"w": 1, "watt": 1, "watts": 1}, eng="all"),
     "area": Quantity("cross-section area", "CM", "circular mils (CM)",
                      {"cm": 1, "cmil": 1, "cmils": 1, "mil": 1, "mils": 1, "circular mil": 1, "circular mils": 1,
                       "circ mil": 1, "circ mils": 1, "mcm": 1000}, prefixable=False),

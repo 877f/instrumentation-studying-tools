@@ -102,6 +102,8 @@ class Part:
 class Chapter:
     """Everything one chapter offers: practice templates and a formula sheet."""
 
+    type = "worksheet"
+
     def __init__(self, id, number, title, parts, templates, formulas=()):
         self.id = id                  # URL-safe, e.g. "ch2"
         self.number = number
@@ -114,7 +116,7 @@ class Chapter:
         assert all(t.part in parts for t in templates), f"{id}: template in an unknown part"
 
     def summary(self):
-        return {"id": self.id, "number": self.number, "title": self.title,
+        return {"id": self.id, "type": self.type, "number": self.number, "title": self.title,
                 "question_count": len(self.templates), "part_count": len(self.parts)}
 
     def detail(self):

@@ -111,6 +111,7 @@ async function render() {
     if (!first) return await homeView(token);
     if (first === 'quiz') return sess ? quizView() : go('#/', true);
     if (first === 'summary') return lastSummary ? summaryView() : go('#/', true);
+    if (Object.hasOwn(FORMULA_ROUTES, first)) return await FORMULA_ROUTES[first](second, token);   // formula.js
     return await chapterView(decodeURIComponent(first), TABS.includes(second) ? second : 'practice', token);
   } catch (e) {
     if (token === renderToken) errorView(e.message);
@@ -145,6 +146,7 @@ async function homeView(token) {
     ${resumeBanner()}
     <h2>Chapters</h2>
     <div class="list">${chapters.map((c) => {
+      if (c.type === 'formula') return formulaCard(c);
       const m = Math.min(masteredCount(c.id), c.question_count);
       return `<a class="chapter" href="#/${esc(c.id)}">
         <div class="ch-num">${c.number}</div>
@@ -153,7 +155,8 @@ async function homeView(token) {
           <div class="meter"><div style="width:${(100 * m) / c.question_count}%"></div></div></div>
         <span class="chev" aria-hidden="true">›</span></a>`;
     }).join('')}</div>
-    <p class="fine">${canSave ? 'Your progress is saved in this browser.' : "This browser isn't saving progress (private mode?)."}</p>`;
+    <p class="fine">${canSave ? 'Chapter progress is saved in this browser. Formula drills reset when you close the page.'
+      : "This browser isn't saving progress (private mode?)."}</p>`;
   bindResume();
 }
 
@@ -162,6 +165,7 @@ async function homeView(token) {
 async function chapterView(cid, tab, token) {
   const c = await getChapter(cid);
   if (token !== renderToken) return;
+  if (c.type === 'formula') return formulaModuleView(c);   // formula.js
   const label = (t) => t[0].toUpperCase() + t.slice(1);
   app.innerHTML = `
     <a class="back" href="#/">‹ Chapters</a>

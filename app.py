@@ -78,10 +78,20 @@ def build_session(chapter, mode, parts, count, shuffle, template_ids, stats):
     return [t.question(chapter, t.generate(rng) if varied else dict(t.worksheet), varied) for t in chosen]
 
 
+def worksheet_chapter(cid):
+    c = CHAPTERS_BY_ID.get(cid) if isinstance(cid, str) else None
+    return c if getattr(c, "type", None) == "worksheet" else None
+
+
+def formula_module(mid):
+    m = CHAPTERS_BY_ID.get(mid) if isinstance(mid, str) else None
+    return m if getattr(m, "type", None) == "formula" else None
+
+
 def lookup():
     """Template + givens from a check/reveal request, or (None, None, body) if invalid."""
     body = request.get_json(silent=True) or {}
-    chapter = CHAPTERS_BY_ID.get(body.get("chapter"))
+    chapter = worksheet_chapter(body.get("chapter"))
     t = chapter.by_id.get(body.get("template_id")) if chapter else None
     params = body.get("params")
     ok = (t is not None and isinstance(params, dict) and set(params) == set(t.kind.fields) and
@@ -116,7 +126,7 @@ def api_chapter(cid):
 @app.post("/api/session")
 def api_session():
     body = request.get_json(silent=True) or {}
-    chapter = CHAPTERS_BY_ID.get(body.get("chapter"))
+    chapter = worksheet_chapter(body.get("chapter"))
     if chapter is None:
         return bad("No such chapter.")
     mode = body.get("mode", "worksheet")
@@ -150,6 +160,88 @@ def api_reveal():
     if t is None:
         return bad("Bad question data. Start a new session.")
     return jsonify(grader.reveal(t, params))
+
+
+# ------------------------------------------------------- formula drills
+# Stateless like the rest: the browser keeps the in-session stats and repeat queue.
+
+def formula_lookup(body):
+    """-> (module, level, formula) from a request body, or None if anything is invalid."""
+    m = formula_module(body.get("module"))
+    level = m.levels_by_id.get(body.get("level")) if m else None
+    f = m.by_key.get(body.get("key")) if level else None
+    return (m, level, f) if f is not None and f.key in level.keys else None
+
+
+def numeric_params(f, params):
+    ok = (isinstance(params, dict) and set(params) == set(f.knowns) and
+          all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
+              for v in params.values()))
+    return params if ok else None
+
+
+@app.post("/api/formula/session")
+def api_formula_session():
+    body = request.get_json(silent=True) or {}
+    m = formula_module(body.get("module"))
+    level = m.levels_by_id.get(body.get("level")) if m else None
+    if level is None:
+        return bad("No such level.")
+    return jsonify({"module": m.id, "level": level.id, "questions": m.session(level, random.Random())})
+
+
+@app.post("/api/formula/question")
+def api_formula_question():
+    found = formula_lookup(request.get_json(silent=True) or {})
+    if found is None:
+        return bad("Bad question data. Go back and start the level again.")
+    m, level, f = found
+    return jsonify({"question": m.question(level, f, random.Random())})
+
+
+@app.post("/api/formula/check")
+def api_formula_check():
+    body = request.get_json(silent=True) or {}
+    found = formula_lookup(body)
+    if found is None:
+        return bad("Bad question data. Go back and start the level again.")
+    m, level, f = found
+    answer = str(body.get("answer", ""))[:200]
+    if level.numeric:
+        params = numeric_params(f, body.get("params"))
+        if params is None:
+            return bad("Bad question data. Go back and start the level again.")
+        return jsonify(m.check_numeric(f, params, answer))
+    return jsonify(m.check_symbolic(f, answer))
+
+
+@app.post("/api/formula/reveal")
+def api_formula_reveal():
+    body = request.get_json(silent=True) or {}
+    found = formula_lookup(body)
+    if found is None:
+        return bad("Bad question data. Go back and start the level again.")
+    m, level, f = found
+    params = numeric_params(f, body.get("params")) if level.numeric else None
+    if level.numeric and params is None:
+        return bad("Bad question data. Go back and start the level again.")
+    return jsonify(m.reveal(f, params, level.numeric))
+
+
+@app.post("/api/formula/blank")
+def api_formula_blank():
+    body = request.get_json(silent=True) or {}
+    m = formula_module(body.get("module"))
+    if m is None:
+        return bad("No such module.")
+    answers = body.get("answers")
+    return jsonify(m.grade_blank(answers if isinstance(answers, dict) else {}))
+
+
+@app.get("/api/formula/<mid>/wheel")
+def api_formula_wheel(mid):
+    m = formula_module(mid)
+    return jsonify(m.wheel()) if m else bad("No such module.", 404)
 
 
 # ------------------------------------------------------------------ startup
