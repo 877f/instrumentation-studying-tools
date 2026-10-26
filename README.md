@@ -44,10 +44,16 @@ Create a **Web Service** from this repo:
 
 ### Keep it awake
 
-Render's free plan puts the site to sleep after 15 minutes without visitors. The next visitor then waits about a minute for it to wake up. `scripts/keepalive.py` pings `/healthz` every 14 minutes to prevent that. It's 14 rather than 15 because a ping exactly every 15 minutes can arrive just after the site has gone to sleep.
+Render's free plan puts the site to sleep after 15 minutes without visitors. The next visitor then waits about a minute for it to wake up. `scripts/keepalive.py` pings `/healthz` every 10 minutes to prevent that, which leaves a 5-minute margin for a late ping.
 
-- **Automatic:** `.github/workflows/keepalive.yml` runs the script on GitHub's servers. It's free because the repo is public. To ping a different address, for example your `.onrender.com` URL before the domain works, set a repository variable named `SITE_URL` under Settings → Secrets and variables → Actions → Variables.
-- **From your computer:** `py scripts/keepalive.py`. Add `--url https://...` to ping another address or `--every 10` to change the interval. Press Ctrl+C to stop.
+There are two ways to run it on a schedule:
+
+- **GitHub Actions (runs 24/7, free for public repos).** The job is in `.github/workflows/keepalive.yml` and is **currently paused** because the GitHub account is locked over billing. After fixing billing, turn it on with `gh workflow enable keepalive.yml --repo 877f/instrumentation-studying-tools`.
+- **Windows Task Scheduler (runs only while the PC is on).** A task named "Instrumentation Nation keep-awake" runs `pyw scripts\keepalive.py --once --log scripts\keepalive.log` every 10 minutes with no popup window, including on battery.
+  - Check that it's working in `scripts\keepalive.log`.
+  - Remove it with `Unregister-ScheduledTask -TaskName "Instrumentation Nation keep-awake"`.
+
+To ping by hand, run `py scripts/keepalive.py`. Add `--url https://...` to ping a different address. Press Ctrl+C to stop.
 
 Keeping one service awake all month uses up to 744 of Render's 750 free hours. GitHub may also run scheduled jobs a few minutes late, and it pauses them after 60 days with no commits.
 
