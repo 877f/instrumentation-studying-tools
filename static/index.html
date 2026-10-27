@@ -7,14 +7,32 @@
 <meta name="description" content="Practice problems with worked solutions for our electronics class.">
 <meta property="og:title" content="Instrumentation Nation">
 <meta property="og:description" content="Practice problems with worked solutions for our electronics class.">
-<meta name="theme-color" content="#fff5ec" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1d1510" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23664930'/%3E%3Cpath d='M18 4 8 18h7l-2 10 10-14h-7z' fill='%23FFDBBB'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#2b4862" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e151c" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121920'/%3E%3Crect x='3' y='3' width='26' height='19' rx='3' fill='%23f6f4ec'/%3E%3Cpath d='M4 16A17 17 0 0 1 28 16' fill='none' stroke='%2317191b' stroke-width='1.8'/%3E%3Cpath d='M16 28 24 10.8' stroke='%23d42b1e' stroke-width='2.4' stroke-linecap='round'/%3E%3Crect x='3' y='22' width='26' height='7' fill='%23121920'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/sofia-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/michroma.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/sofia-sans-extra-condensed.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<main id="app"><div class="loading"><div class="spinner"></div></div></main>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="m-mirror" x1="0" x2="1" y1="0" y2="0">
+      <stop class="s1" offset="0"/><stop class="s2" offset=".28"/><stop class="s1" offset=".52"/><stop class="s2" offset=".78"/><stop class="s1" offset="1"/>
+    </linearGradient>
+    <linearGradient id="m-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".24"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="m-glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>
+<main id="app"><div class="loading"></div></main>
 <div class="credit">Made by Cannon</div>
+<script src="/static/instruments.js" defer></script>
 <script src="/static/formula.js" defer></script>
 <script src="/static/app.js" defer></script>
 </body>

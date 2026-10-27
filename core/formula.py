@@ -392,7 +392,9 @@ class FormulaModule:
     def summary(self):
         return {"id": self.id, "type": self.type, "title": self.title, "badge": self.badge,
                 "question_count": len(self.formulas),
-                "subtitle": f"{len(self.formulas)} formulas · {len(self.levels)} levels + blank wheel"}
+                "subtitle": f"{len(self.formulas)} formulas · {len(self.levels)} levels + blank wheel",
+                # wheel layout only (no formulas), so the home screen can draw the ring
+                "quadrants": [{"var": q, "slots": sum(f.target == q for f in self.formulas)} for q in self.quadrants]}
 
     def detail(self):
         return {**self.summary(), "intro": self.intro,

@@ -1,6 +1,7 @@
 """Instrumentation Nation study tool: Flask server.
 
 Local:   py app.py            (prints a LAN URL for your phone)
+Testing: ./run.sh or run.bat  (same as py app.py --dev --open: live reload, opens your browser)
 Hosted:  gunicorn app:app     (see gunicorn.conf.py)
 
 The server is stateless. Each person's progress lives in their own browser,
@@ -13,6 +14,9 @@ import os
 import random
 import socket
 import sys
+import threading
+import time
+import webbrowser
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -104,7 +108,11 @@ def lookup():
 
 @app.get("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    if not app.config.get("DEV"):
+        return send_from_directory(app.static_folder, "index.html")
+    with open(os.path.join(app.static_folder, "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    return html.replace("</body>", DEV_SCRIPT + "</body>"), 200, {"Cache-Control": "no-store"}
 
 
 @app.get("/healthz")
@@ -244,6 +252,68 @@ def api_formula_wheel(mid):
     return jsonify(m.wheel()) if m else bad("No such module.", 404)
 
 
+# ------------------------------------------------------------ local testing
+# `py app.py --dev` (run.sh and run.bat use it): the server restarts when a .py file changes,
+# and open pages reload when anything in static/ changes (a CSS-only change swaps the
+# stylesheet without a reload, so you keep your place in a quiz). Never active under gunicorn.
+
+DEV_SCRIPT = """<script>
+(() => {  // live reload, added by app.py --dev
+  let boot = null;
+  const events = new EventSource('/__dev/events');
+  events.addEventListener('hello', (e) => { if (boot && boot !== e.data) location.reload(); boot = e.data; });
+  events.addEventListener('reload', () => location.reload());
+  events.addEventListener('css', () => document.querySelectorAll('link[rel=stylesheet]').forEach((l) => {
+    const u = new URL(l.href); u.searchParams.set('v', Date.now()); l.href = u;
+  }));
+})();
+</script>
+"""
+
+
+def static_mtimes():
+    out = {}
+    for root, _, files in os.walk(app.static_folder):
+        for name in files:
+            path = os.path.join(root, name)
+            try:
+                out[path] = os.stat(path).st_mtime_ns
+            except OSError:
+                pass
+    return out
+
+
+def enable_dev_mode():
+    app.config["DEV"] = True
+    boot = str(time.time())       # changes when the server restarts, so open pages reload
+
+    @app.get("/__dev/events")
+    def dev_events():
+        def stream():
+            yield f"event: hello\ndata: {boot}\n\n"
+            seen, quiet = static_mtimes(), 0
+            while True:
+                time.sleep(0.4)
+                now = static_mtimes()
+                changed = [p for p in now.keys() | seen.keys() if now.get(p) != seen.get(p)]
+                seen = now
+                if changed:
+                    kind = "css" if all(p.endswith(".css") for p in changed) else "reload"
+                    yield f"event: {kind}\ndata: {len(changed)}\n\n"
+                    quiet = 0
+                elif (quiet := quiet + 1) >= 10:
+                    yield ": still here\n\n"    # ends this loop soon after the tab closes
+                    quiet = 0
+        return app.response_class(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-store"})
+
+
+class ShowReloads(logging.Filter):
+    """In --dev mode, show werkzeug's "Detected change in ..." lines but not every request."""
+
+    def filter(self, record):
+        return record.levelno >= logging.WARNING or "Detected change" in record.getMessage()
+
+
 # ------------------------------------------------------------------ startup
 
 def lan_ips():
@@ -280,30 +350,44 @@ def port_free(port):
 def main():
     ap = argparse.ArgumentParser(description="Instrumentation Nation study tool")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 5000)))
+    ap.add_argument("--dev", action="store_true", help="live reload: restart on .py changes, refresh pages on static/ changes")
+    ap.add_argument("--open", action="store_true", help="open the site in your browser")
     args = ap.parse_args()
+    restarted = os.environ.get("WERKZEUG_RUN_MAIN") == "true"    # --dev runs the server in a child process
 
-    if not port_free(args.port):
-        print(f"Port {args.port} is already in use. Is the study tool already running in another window?\n"
-              f"Close it, or run on another port:  py app.py --port 5050")
-        sys.exit(1)
+    if not restarted:
+        if not port_free(args.port):
+            print(f"Port {args.port} is already in use. Is the study tool already running in another window?\n"
+                  f"Close it, or add --port 5050 to use another port.")
+            sys.exit(1)
 
-    ips = lan_ips()
-    line = "=" * 64
-    print(line)
-    print(" Instrumentation Nation study tool is running")
-    print(f"   This computer:          http://localhost:{args.port}")
-    if ips:
-        print(f"   Phone / other device:   http://{ips[0]}:{args.port}   (same Wi-Fi)")
-        for ip in ips[1:]:
-            print(f"   Other address:          http://{ip}:{args.port}   (often a virtual adapter)")
+        ips = lan_ips()
+        line = "=" * 64
+        print(line)
+        print(" Instrumentation Nation study tool is running")
+        print(f"   This computer:          http://localhost:{args.port}")
+        if ips:
+            print(f"   Phone / other device:   http://{ips[0]}:{args.port}   (same Wi-Fi)")
+            for ip in ips[1:]:
+                print(f"   Other address:          http://{ip}:{args.port}   (often a virtual adapter)")
+        else:
+            print("   No LAN address found. Are you connected to Wi-Fi?")
+        if args.dev:
+            print(" Live reload is on: save a file and open pages update by themselves.")
+        print(" Phone can't connect? See README.md -> 'Phone can't connect'.")
+        print(" Press Ctrl+C to stop.")
+        print(line, flush=True)
+        if args.open:
+            threading.Timer(1.0, webbrowser.open, [f"http://localhost:{args.port}"]).start()
+
+    log = logging.getLogger("werkzeug")
+    if args.dev:
+        enable_dev_mode()
+        log.setLevel(logging.INFO)
+        log.addFilter(ShowReloads())
     else:
-        print("   No LAN address found. Are you connected to Wi-Fi?")
-    print(" Phone can't connect? See README.md -> 'Phone can't connect'.")
-    print(" Press Ctrl+C to stop.")
-    print(line, flush=True)
-
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)   # keep the URL banner readable
-    app.run(host="0.0.0.0", port=args.port, debug=False, threaded=True)
+        log.setLevel(logging.WARNING)   # keep the URL banner readable
+    app.run(host="0.0.0.0", port=args.port, debug=False, threaded=True, use_reloader=args.dev)
 
 
 if __name__ == "__main__":

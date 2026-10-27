@@ -50,14 +50,26 @@ How it works:
 - **Stats:** kept in memory only, never saved, and gone when you close the page. The Session summary shows accuracy per level and every formula you missed.
 - **No notes during questions:** the filled-in wheel appears only on results and summary screens.
 
-## Run it locally
+## Test it on your computer
 
-```
-py -m pip install -r requirements.txt
-py app.py
-```
+You don't need access to the hosted site to try a change. Run your own copy:
 
-Open the URL it prints. Phones on the same Wi-Fi can use the "Phone / other device" address. On Mac or Linux, use `python3` instead of `py`.
+| System | Command |
+|---|---|
+| Linux or Mac | `./run.sh` |
+| Windows | Double-click `run.bat` |
+
+The first run sets up a private Python environment in `.venv/` and installs the requirements. After that, the script starts the site, opens it in your browser, and prints a "Phone / other device" address for phones on the same Wi-Fi.
+
+While it runs, open pages update when you save a file:
+
+- **CSS changes** apply in place, without a reload, so you keep your place in a quiz.
+- **JavaScript and HTML changes** reload the page.
+- **Python changes** restart the server, then reload the page.
+
+Press Ctrl+C to stop it. Add `--port 5050` to use a different port. Run the tests with `./run.sh test` or `run.bat test`.
+
+Without the scripts, `py app.py` still works if the requirements are installed; on Mac or Linux, use `python3` instead of `py`. Add `--dev` to turn on live reload.
 
 ## Host it on Render
 
@@ -114,7 +126,18 @@ Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `c
 4. Start the app. On startup it checks every formula against `numeric_values()`, so a typo in a formula stops it with an error.
 5. Copy `test_wheel.py`, list equivalent spellings for your formulas, and run it.
 
-New modules show up on the home screen automatically, in the order they appear in `CHAPTERS`.
+New modules show up on the home screen automatically, in the order they appear in `CHAPTERS`, each with its own instrument (see [Look and feel](#look-and-feel)).
+
+## Look and feel
+
+The site is styled as an instrument panel: a steel-blue panel, ivory faceplates, and an analog meter for each module.
+
+- **Colors and fonts** are set once, at the top of `static/app.css`, with the dark-mode versions right below.
+- **A worksheet chapter** gets a meter whose scale runs from 0 to its question count. The needle shows how many questions are mastered. The meter's code is in `static/instruments.js`.
+- **A formula drill** gets a ring with one segment per formula. A segment lights up once you get that formula right in the current session.
+- **Part colors** follow the resistor color code: Part 1 is brown, 2 red, 3 orange, 4 yellow, 5 green, and so on.
+- **Fonts** are served from `static/fonts/`, so the site makes no requests to other servers. Their licenses are in `static/fonts/OFL.txt`.
+- **Motion:** needles swing and the home screen's meters sweep when the page opens, unless the device is set to reduce motion.
 
 ## Chapter 2: how ambiguous questions are read
 
@@ -149,5 +172,7 @@ If the page loads on the computer but the phone times out, the Wi-Fi probably bl
 | `app.py` | Flask server (stateless JSON API) |
 | `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`) plus the `CHAPTERS` registry |
 | `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker) |
-| `static/` | Front end: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), no build step |
+| `static/` | Front end, no build step: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), `instruments.js` (meters, the formula ring, lamps, the needle animation) |
+| `static/fonts/` | Fonts used by the site, with their licenses in `OFL.txt` |
+| `run.sh`, `run.bat` | Run the site on your own computer for testing, with live reload |
 | `scripts/keepalive.py` | Pings the site so it stays awake |
