@@ -37,6 +37,18 @@ QUANTITIES = {
     "area": Quantity("cross-section area", "CM", "circular mils (CM)",
                      {"cm": 1, "cmil": 1, "cmils": 1, "mil": 1, "mils": 1, "circular mil": 1, "circular mils": 1,
                       "circ mil": 1, "circ mils": 1, "mcm": 1000}, prefixable=False),
+    # Household kWh: energy in kilowatt-hours, time in hours, and a monthly bill in dollars.
+    "kwh": Quantity("energy", "kWh", "kilowatt-hours (kWh)",
+                    {"kwh": 1, "kilowatt-hour": 1, "kilowatt-hours": 1, "kilowatt hour": 1, "kilowatt hours": 1,
+                     "wh": 1e-3, "watt-hour": 1e-3, "watt-hours": 1e-3, "watt hour": 1e-3, "watt hours": 1e-3},
+                    prefixable=False),
+    "hours": Quantity("time", "h", "hours (h)",
+                      {"h": 1, "hr": 1, "hrs": 1, "hour": 1, "hours": 1, "min": 1 / 60, "mins": 1 / 60,
+                       "minute": 1 / 60, "minutes": 1 / 60, "s": 1 / 3600, "sec": 1 / 3600, "secs": 1 / 3600,
+                       "second": 1 / 3600, "seconds": 1 / 3600}, prefixable=False),
+    "cost": Quantity("cost", "$", "dollars ($)",
+                     {"$": 1, "dollar": 1, "dollars": 1, "usd": 1, "¢": 0.01, "c": 0.01, "ct": 0.01, "cts": 0.01,
+                      "cent": 0.01, "cents": 0.01}, prefixable=False),
 }
 
 ENG_PREFIX = {-12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G"}

@@ -98,7 +98,7 @@ def api_tests():
     check(r.status_code == 200 and r.data == b"ok", "healthz")
 
     chapters = c.get("/api/chapters").get_json()
-    check([(ch["id"], ch["type"]) for ch in chapters] == [("ch2", "worksheet"), ("ohms-wheel", "formula")]
+    check([(ch["id"], ch["type"]) for ch in chapters][:2] == [("ch2", "worksheet"), ("ohms-wheel", "formula")]
           and chapters[0]["question_count"] == 54, "module list: chapter 2, then the Ohm's Law Wheel")
     d = c.get("/api/chapters/ch2").get_json()
     check(len(d["templates"]) == 54 and set(d["parts"]) == {"1", "2", "3", "4", "5"} and d["formulas"], "chapter detail")

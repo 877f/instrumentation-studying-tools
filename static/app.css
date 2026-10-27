@@ -188,6 +188,10 @@ button { -webkit-tap-highlight-color: transparent; }
   background: radial-gradient(circle at 35% 35%, #fff, #8f979d 62%, #5b636b); }
 .credit::before { left: 6px; }
 .credit::after { right: 6px; }
+/* the smaller tag riveted above the main plate */
+.credit.tag { bottom: calc(38px + env(safe-area-inset-bottom)); padding: 4px 14px 3px; font-size: 9px; letter-spacing: .22em; }
+.credit.tag::before { left: 5px; }
+.credit.tag::after { right: 5px; }
 
 /* loading */
 .loading { display: grid; place-items: center; gap: 18px; padding: 22vh 0 0; text-align: center; }
@@ -540,6 +544,87 @@ details.solution { margin-top: 14px; }
 .wheel-list b { font: 400 16px var(--f-display); }
 .wheel-list .help { margin: 0 0 4px; }
 .wheel-list .f-eq { font-size: 15.5px; }
+
+/* ---------------------------------------------------------- problem sets */
+
+.reminder { display: inline-block; margin-top: 16px; padding: 10px 15px; border-radius: 10px; background: var(--enclosure-deep);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .08); font: 600 15.5px/1.4 var(--f-mono);
+  font-variant-ligatures: none; }
+.ps-setup { margin-bottom: 14px; }
+.setting { display: flex; align-items: center; gap: 12px; }
+.setting input { width: 7.5em; min-width: 0; height: 48px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--faceplate-2);
+  color: var(--text); font: 500 18px var(--f-mono); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .12), inset 0 0 0 1px var(--hairline); }
+.setting input:focus { outline: none; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .12), 0 0 0 2.5px var(--ink); }
+.setting span { font-weight: 650; font-size: 15px; color: var(--muted); }
+.help.flush { margin: 0 0 12px; }
+.sheet-head { margin: 26px 0 12px; }
+
+/* The appliance table, styled like the textbook's: cream paper, thin brown rules, bold upper-case header. */
+.tb-wrap { margin: 4px 0 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tb {
+  --tb-paper: #f6eed9; --tb-line: #8a5a2c; --tb-rule: rgba(138, 90, 44, .38); --tb-ink: #2b1d0f;
+  --tb-field: #fffaf0; --tb-field-line: #b38b5d;
+  width: 100%; border-collapse: collapse; background: var(--tb-paper); color: var(--tb-ink); border: 1.5px solid var(--tb-line);
+  font: 500 16px/1.3 var(--f-sans); font-variant-numeric: tabular-nums;
+}
+@media (prefers-color-scheme: dark) {
+  .tb { --tb-paper: #2b251a; --tb-line: #b08354; --tb-rule: rgba(176, 131, 84, .42); --tb-ink: #f0e7d2;
+    --tb-field: #1d1912; --tb-field-line: #8a6a45; }
+}
+.tb th, .tb td { padding: 8px 10px; text-align: left; vertical-align: middle; }
+.tb thead th { font: 800 12.5px/1.2 var(--f-sans); letter-spacing: .05em; vertical-align: bottom; border-bottom: 1.5px solid var(--tb-line); }
+.tb tbody tr + tr > * { border-top: 1px solid var(--tb-rule); }
+.tb tbody th { font-weight: 650; }
+.tb .num { text-align: right; white-space: nowrap; }
+.tb thead th.num { white-space: normal; }
+.tb tfoot > tr > * { border-top: 1.5px solid var(--tb-line); }
+.tb tfoot th { text-align: right; font: 800 13px/1.2 var(--f-sans); letter-spacing: .05em; }
+.tb td.in { width: 1%; text-align: right; }
+.tb input { width: 6.4em; height: 42px; padding: 0 10px; border: 1px solid var(--tb-field-line); border-radius: 6px; background: var(--tb-field);
+  color: var(--tb-ink); font: 500 16px var(--f-mono); text-align: right; }
+.tb input:focus { outline: 2.5px solid var(--tb-ink); outline-offset: 1px; }
+.tb input::placeholder { color: var(--tb-field-line); }
+.tb .ok input { border-color: var(--go); background: var(--go-wash); box-shadow: inset 0 0 0 1px var(--go); }
+.tb .no input, .tb .miss input { border-color: var(--stop); background: var(--stop-wash); box-shadow: inset 0 0 0 1px var(--stop); }
+.tb .rev input { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+.tb .fix { display: block; margin-top: 3px; font: 600 13.5px var(--f-mono); color: var(--stop-ink); }
+.tb .rev .fix { color: var(--tb-ink); }
+@media (max-width: 480px) {
+  .tb { font-size: 14.5px; }
+  .tb th, .tb td { padding: 7px 6px; }
+  .tb thead th, .tb tfoot th { font-size: 11.5px; letter-spacing: .03em; }
+  .tb input { width: 5.4em; padding: 0 7px; }
+}
+
+/* The circuit diagram, drawn in the ink color so it works on light and dark faceplates. */
+.circuit { display: block; width: 100%; max-width: 460px; height: auto; margin: 6px auto 4px; color: var(--text); }
+.circuit .wire { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.circuit .plate { stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; }
+.circuit .plate.neg { stroke-width: 8; stroke-linecap: butt; }
+.circuit .arrow { fill: currentColor; }
+.circuit text { fill: currentColor; dominant-baseline: central; }
+.circuit .lbl { font: 650 21px var(--f-sans); }
+.circuit .lbl.mid { text-anchor: middle; }
+.circuit .lbl.end { text-anchor: end; }
+.circuit .sign { font: 700 22px var(--f-mono); text-anchor: middle; }
+.circuit .q { fill: var(--pointer); font-weight: 850; }
+
+/* answer boxes under a diagram or a table */
+.pfield { margin-top: 14px; }
+.pfield > label { display: block; margin-bottom: 6px; font-weight: 750; font-size: 15.5px; }
+.pfield > label small { margin-left: 6px; font-weight: 500; font-size: 14px; color: var(--muted); }
+.pfield .ansrow input { height: 52px; }
+.pfield.ok input { background: var(--go-wash); box-shadow: inset 0 0 0 2px var(--go); }
+.pfield.no input, .pfield.miss input { background: var(--stop-wash); box-shadow: inset 0 0 0 2px var(--stop); }
+.pfield.rev input { box-shadow: inset 0 0 0 2px var(--amber); }
+.pfield .fix { display: block; margin-top: 6px; font: 600 15px var(--f-mono); color: var(--stop-ink); }
+.pfield.rev .fix { color: var(--text); }
+.pfield.formula input { font-size: 18px; }
+#pForm .start { margin-top: 20px; }
+.msgs { margin: 0; padding-left: 20px; }
+.msgs li + li { margin-top: 6px; }
+.alert.ok-note { display: flex; align-items: flex-start; gap: 12px; background: var(--go-wash); }
+.alert.ok-note .lamp { margin-top: 3px; }
 
 /* --------------------------------------------------------------- motion */
 

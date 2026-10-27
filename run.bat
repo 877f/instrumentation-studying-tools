@@ -22,7 +22,7 @@ if errorlevel 1 (
   exit /b 1
 )
 if /i "%~1"=="test" (
-  for %%t in (test_app.py test_wheel.py test_worksheet.py) do (
+  for %%t in (test_app.py test_wheel.py test_worksheet.py test_problems.py) do (
     echo == %%t
     .venv\Scripts\python %%t
   )

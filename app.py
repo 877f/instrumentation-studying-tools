@@ -252,6 +252,62 @@ def api_formula_wheel(mid):
     return jsonify(m.wheel()) if m else bad("No such module.", 404)
 
 
+# --------------------------------------------------------- problem sets
+# Household kWh and Circuit Diagrams. Stateless too: each question's givens come back with the answers.
+
+def problem_module(mid):
+    m = CHAPTERS_BY_ID.get(mid) if isinstance(mid, str) else None
+    return m if getattr(m, "type", None) == "problems" else None
+
+
+def problem_lookup(body):
+    """-> (module, level, params) from a check/reveal request, or None if anything is invalid."""
+    m = problem_module(body.get("module"))
+    level = m.levels_by_id.get(body.get("level")) if m and isinstance(body.get("level"), str) else None
+    params = body.get("params")
+    return (m, level, params) if level is not None and m.valid(level, params) else None
+
+
+@app.post("/api/problems/session")
+def api_problems_session():
+    body = request.get_json(silent=True) or {}
+    m = problem_module(body.get("module"))
+    level = m.levels_by_id.get(body.get("level")) if m and isinstance(body.get("level"), str) else None
+    if level is None:
+        return bad("No such level.")
+    try:
+        questions = m.session(level, body.get("mode"), random.Random(), body)
+    except ValueError as e:
+        return bad(str(e))
+    return jsonify({"module": m.id, "level": level.id, "questions": questions})
+
+
+@app.post("/api/problems/check")
+def api_problems_check():
+    body = request.get_json(silent=True) or {}
+    found = problem_lookup(body)
+    if found is None:
+        return bad("Bad question data. Go back and start the level again.")
+    m, level, params = found
+    answers = body.get("answers")
+    return jsonify(m.check(level, params, answers if isinstance(answers, dict) else {},
+                           str(body.get("formula") or "")[:200]))
+
+
+@app.post("/api/problems/reveal")
+def api_problems_reveal():
+    found = problem_lookup(request.get_json(silent=True) or {})
+    if found is None:
+        return bad("Bad question data. Go back and start the level again.")
+    return jsonify(found[0].reveal(found[1], found[2]))
+
+
+@app.get("/api/problems/<mid>/formulas")
+def api_problems_formulas(mid):
+    m = problem_module(mid)
+    return jsonify(m.formulas) if m else bad("No such module.", 404)
+
+
 # ------------------------------------------------------------ local testing
 # `py app.py --dev` (run.sh and run.bat use it): the server restarts when a .py file changes,
 # and open pages reload when anything in static/ changes (a CSS-only change swaps the

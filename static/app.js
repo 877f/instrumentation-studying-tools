@@ -126,6 +126,7 @@ async function render() {
     if (first === 'quiz') return sess ? quizView() : go('#/', true);
     if (first === 'summary') return lastSummary ? summaryView() : go('#/', true);
     if (Object.hasOwn(FORMULA_ROUTES, first)) return await FORMULA_ROUTES[first](second, token);   // formula.js
+    if (Object.hasOwn(PROBLEM_ROUTES, first)) return await PROBLEM_ROUTES[first](second, token);   // problems.js
     return await chapterView(decodeURIComponent(first), TABS.includes(second) ? second : 'practice', token);
   } catch (e) {
     if (token === renderToken) errorView(e.message);
@@ -180,8 +181,8 @@ async function homeView(token) {
     </header>
     ${resumeBanner()}
     <section class="bays" aria-label="Study modules">${chapters.map((c) =>
-      (c.type === 'formula' ? formulaCard(c) : chapterBay(c))).join('')}</section>
-    <p class="fine">${canSave ? 'Chapter progress is saved in this browser. Formula drills reset when you close the page.'
+      (c.type === 'formula' ? formulaCard(c) : c.type === 'problems' ? problemCard(c) : chapterBay(c))).join('')}</section>
+    <p class="fine">${canSave ? 'Chapter progress is saved in this browser. Formula drills and problem sets reset when you close the page.'
       : "This browser isn't saving progress (private mode?)."}</p>`;
   bindResume();
   animateInstruments(app, { powerOn: !poweredOn });
@@ -206,6 +207,7 @@ async function chapterView(cid, tab, token) {
   const c = await getChapter(cid);
   if (token !== renderToken) return;
   if (c.type === 'formula') return formulaModuleView(c);   // formula.js
+  if (c.type === 'problems') return problemModuleView(c);  // problems.js
   const label = (t) => t[0].toUpperCase() + t.slice(1);
   const m = Math.min(masteredCount(c.id), c.question_count);
   app.innerHTML = `${rail('#/', 'Chapters')}

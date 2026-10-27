@@ -1,0 +1,13 @@
+appliance,watts,hours_min,hours_max,worksheet_hours
+Air conditioner,860,4,10,6
+Blow dryer,1000,0.1,0.5,0.2
+Clock,2,24,24,24
+Clothes dryer,4000,0.5,1.5,1
+Dishwasher,1200,1,2,1.5
+Heater,1322,2,8,4
+Microwave oven,800,0.1,0.5,0.3
+Range,"12,200",0.5,3,1.5
+Refrigerator,500,8,12,10
+Television,250,2,6,4
+Washing machine,400,0.5,1.5,1
+Water heater,2500,2,4,3

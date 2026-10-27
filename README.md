@@ -2,10 +2,11 @@
 
 Practice problems with worked solutions for our electronics class. It's live at **https://instrumentationnation.com**.
 
-The home screen lists the study modules. There are two kinds:
+The home screen lists the study modules. There are three kinds:
 
 - **Worksheet chapters**, such as Chapter 2: numeric problems from a worksheet, explained below.
 - **Formula drills**, such as the Ohm's Law Wheel: you type formulas from memory. See [Ohm's Law Wheel](#ohms-law-wheel).
+- **Problem sets**, such as [Household kWh](#household-kwh) and [Circuit Diagrams](#circuit-diagrams): levels of problems with several answer boxes, drawn as a table or a circuit.
 
 Each worksheet chapter has three tabs:
 
@@ -26,6 +27,7 @@ Units are optional. Without a unit, the answer is read in the unit shown in the 
 - Prefixes work: `556 uA`, `0.556 mA`, `40 kohm`, `2 Mohm`, `25 uS`
 - Unit case doesn't matter, except **m vs M**: `m` is milli and `M` is mega
 - Length and time units are converted: `80 yd` counts as 240 ft, `2 min` counts as 120 s
+- In Household kWh: `1,000 Wh` counts as 1 kWh, `90 min` as 1.5 h, and money can be `$21.77`, `21.77` or `2177¢`
 
 Answers within 1% are marked correct, and answers are shown to 3 significant figures. When an answer is off by a power of 10 or by a forgotten conversion, the feedback says which one.
 
@@ -49,6 +51,82 @@ How it works:
 - **Feedback:** a wrong answer shows the right formula and how to derive it from the base equations. The Hint button only says which base equation(s) to start from. A missed question comes back two questions later, up to 3 times.
 - **Stats:** kept in memory only, never saved, and gone when you close the page. The Session summary shows accuracy per level and every formula you missed.
 - **No notes during questions:** the filled-in wheel appears only on results and summary screens.
+
+## Problem sets: what they share
+
+Household kWh and Circuit Diagrams work the same way:
+
+- **Grading** uses the same checker as Chapter 2: prefixes, commas, the 1% tolerance, answers shown to 3 significant figures, and specific feedback on a wrong answer.
+- **Hint** gives a nudge in words, never a formula.
+- **Formulas** appear only after you press Check (in the worked solution) and on the results and summary screens. The question screen never shows one. The kWh module's first screen shows a one-line reminder, as requested.
+- **Stats** are kept in memory only, like the Ohm's Law Wheel. Nothing is saved, and closing or reloading the page clears them. The rate setting and the custom table reset too.
+- **Session summary** shows accuracy per level and each question type you missed, such as "K4 · The TOTAL kWh" or "D4 · Given P and R: find I".
+- **Show answer** fills in every box and counts the question as missed.
+
+## Household kWh
+
+Energy = power × time, so kWh = (W × hours) ÷ 1000. The column is "Power Rating (Watts)"; nothing in the module says "watts per hour".
+
+| Level | What you do |
+|---|---|
+| K1 · One appliance | Given the watts and the hours, find the kWh |
+| K2 · Unit twists | The time is in minutes, or the power is in kW |
+| K3 · Rearrange | Given the kWh and the hours, find the watts; or given the kWh and the watts, find the hours |
+| K4 · Appliance table | 3 to 6 appliances: each row's kWh, then the TOTAL |
+| K5 · Monthly cost | The table, then the kWh for a 30-day month and its cost at the rate you set |
+
+Modes:
+
+- **Worksheet:** fixed hours (the `worksheet_hours` column). K1 to K3 go down all 12 appliances. K4 and K5 split them into two tables of 6.
+- **Variations:** random hours from each appliance's range. 10 questions for K1 to K3, 3 tables for K4 and K5.
+- **Custom:** type the hours from your teacher's problem and change any wattage. Rows with no hours are left out. Turn on "Monthly cost too" for a K5-style problem. It counts toward K4 (or K5) in your stats.
+
+Grading: each row is marked on its own, then the TOTAL. If rows are wrong but your TOTAL adds up your own rows, the feedback says so. The same goes for a monthly kWh that matches your own TOTAL, and a cost that matches your own monthly kWh. The worked solution shows W × hours = Wh, then ÷ 1000 = kWh, for every row, and names the biggest energy user.
+
+### Defaults I chose
+
+- **Electricity rate:** 12¢ per kWh. Change it in the box on the module page. The 12 is set once, as `RATE` in `chapters/kwh.py`.
+- **Month:** 30 days, set once as `DAYS_PER_MONTH` in `chapters/kwh.py`.
+- **Cost answers** are in dollars and shown to the cent, such as $59.39, instead of 3 significant figures.
+- **Clean hours:** from 1 h up, hours are multiples of 0.5 h. Below 1 h, they're multiples of 6 minutes (0.1 h), so 0.3 h is 18 min and the math stays clean.
+- **Worksheet hours**, picked inside each range: air conditioner 6, blow dryer 0.2, clock 24, clothes dryer 1, dishwasher 1.5, heater 4, microwave oven 0.3, range 1.5, refrigerator 10, television 4, washing machine 1, water heater 3.
+- **K2 twists:** power in kW only from 250 W up (no 0.002 kW clock), time in minutes only up to 3 h. In Worksheet mode the two twists alternate down the list, and the clock is skipped.
+- **The hours box** in Custom mode allows at most 24 hours per day.
+
+### Edit the appliance list
+
+The list is `chapters/kwh_appliances.csv`. Open it in Excel or any text editor:
+
+```
+appliance,watts,hours_min,hours_max,worksheet_hours
+Air conditioner,860,4,10,6
+Range,"12,200",0.5,3,1.5
+```
+
+- **watts:** the power rating. Write `12200`, or `"12,200"` in quotes because of the comma.
+- **hours_min, hours_max:** the typical hours per day for Variations mode. Use the same number twice for a fixed time, as the clock does (24, 24).
+- **worksheet_hours:** the fixed hours for Worksheet mode.
+- To add an appliance, add a line. To remove one, delete its line. Up to 30 are allowed.
+
+Restart the app after saving. If a line has a mistake, such as a missing number or hours_min above hours_max, the app won't start and prints the line number.
+
+## Circuit Diagrams
+
+Each question is a series loop drawn on the spot: a battery on the left (+ and − marked), a zigzag resistor on the right, and a current arrow labeled I. Two of V, I and R are labeled; the third shows "?". You answer in two steps: (1) the missing value, with units, then (2) the power in watts. The optional **Formula used** box, such as `I = V/R`, is checked with the Ohm's Law Wheel's formula checker. It's reported after you check but never changes the score.
+
+| Level | What you do |
+|---|---|
+| D1 · Find I | V and R given: find I, then P |
+| D2 · Find R | V and I given: find R, then P |
+| D3 · Find V | I and R given: find V, then P |
+| D4 · Mixed | D1 to D3, plus diagrams with P labeled and one of V, I or R: find the other two |
+| D5 · Unit twists | D1 to D3 with mA, µA, kΩ, MΩ and mV; the worked solution converts to base units first |
+
+Defaults I chose:
+
+- **8 questions per level.** D4 includes all 6 kinds at least once. D5 mixes find I, find R and find V.
+- **Clean values:** each diagram starts from a common voltage (1.5 V to 240 V) and resistor value. A pair is used only if the current comes out clean to 3 significant figures and the power to 4. D5 keeps the current between 10 µA and 100 mA and the power at 0.1 mW or more, so no answer is absurdly small. The value lists are at the top of `chapters/circuits.py`.
+- **The formula box** checks the step 1 formula. For D4 diagrams with P labeled, that's the first unknown, such as `I = √(P/R)`.
 
 ## Test it on your computer
 
@@ -97,7 +175,13 @@ Keeping one service awake all month uses up to 744 of Render's 750 free hours. G
 
 ## Add a module
 
-Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `chapters/__init__.py`**. The engine code in `core/` and `static/` doesn't change. Copy the example closest to your new assignment.
+Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `chapters/__init__.py`**. The engine code in `core/` and `static/` doesn't change. Copy the example closest to your new assignment:
+
+| New assignment looks like | Copy |
+|---|---|
+| A worksheet of one-answer numeric questions | `chapters/ch02.py` |
+| Formulas to learn by heart | `chapters/ohms_wheel.py` |
+| Problems with several answer boxes, a table or a diagram | `chapters/kwh.py` (a table) or `chapters/circuits.py` (a circuit) |
 
 ### A worksheet chapter (numeric problems), for example Chapter 3
 
@@ -126,6 +210,22 @@ Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `c
 4. Start the app. On startup it checks every formula against `numeric_values()`, so a typo in a formula stops it with an error.
 5. Copy `test_wheel.py`, list equivalent spellings for your formulas, and run it.
 
+### A problem set, for example series-parallel circuits
+
+1. Copy `chapters/circuits.py` (or `chapters/kwh.py` for a table) to a new file.
+2. In the copy, replace these:
+   - `LEVELS`: id (a letter and a number, such as `S1`), title and one-line description
+   - `generate()`: makes the givens for a session's questions
+   - `valid()`: checks givens sent back by the browser
+   - `view()`: the prompt, the hint (in words, no formulas), and what to draw
+   - `solve()`: the answer boxes (`Answer`), the worked solution and notes
+   - `FORMULAS`: the formula sheet for the results and summary screens
+3. At the bottom of the copy, set `ProblemModule(id=..., title=..., ...)`. Add `modes=`, `settings=` and `custom=` only if the module needs them, as `kwh.py` does.
+4. In `chapters/__init__.py`, import it and add its `MODULE` to `CHAPTERS`.
+5. Start the app. On startup it generates questions for every level and checks that each passes `valid()` and solves to positive numbers, so a typo stops it with an error.
+6. If it needs a new kind of drawing, add one next to `tableHTML()` and `circuitSVG()` in `static/problems.js`. Tables and series circuits work as they are.
+7. Add a section for it to `test_problems.py`, then run `py test_problems.py`.
+
 New modules show up on the home screen automatically, in the order they appear in `CHAPTERS`, each with its own instrument (see [Look and feel](#look-and-feel)).
 
 ## Look and feel
@@ -135,6 +235,8 @@ The site is styled as an instrument panel: a steel-blue panel, ivory faceplates,
 - **Colors and fonts** are set once, at the top of `static/app.css`, with the dark-mode versions right below.
 - **A worksheet chapter** gets a meter whose scale runs from 0 to its question count. The needle shows how many questions are mastered. The meter's code is in `static/instruments.js`.
 - **A formula drill** gets a ring with one segment per formula. A segment lights up once you get that formula right in the current session.
+- **A problem set** gets a meter from 0 to 100 showing your accuracy this session.
+- **The kWh table** is styled like the textbook's: cream paper, thin brown rules and a bold upper-case header. In dark mode it turns dark sepia. On a phone it fits the screen; if a custom table is ever too wide, it scrolls sideways.
 - **Part colors** follow the resistor color code: Part 1 is brown, 2 red, 3 orange, 4 yellow, 5 green, and so on.
 - **Fonts** are served from `static/fonts/`, so the site makes no requests to other servers. Their licenses are in `static/fonts/OFL.txt`.
 - **Motion:** needles swing and the home screen's meters sweep when the page opens, unless the device is set to reduce motion.
@@ -156,7 +258,10 @@ Copper resistivity is **ρ = 10.37 Ω·CM/ft**, the value our class uses. It's s
 py test_worksheet.py           # every worksheet answer to 3 sig figs, with flags (--steps adds worked solutions)
 py test_wheel.py               # Ohm's Law Wheel checker: 12 formulas x spellings x variable sets
 py test_app.py                 # grader and API tests
+py test_problems.py            # Household kWh and Circuit Diagrams: 200 random questions per level
 ```
+
+`test_problems.py` checks that each kWh row is W × h ÷ 1000, the rows add up to the TOTAL, and the month and cost follow. For circuits it checks that V = I × R and that P = V × I = I² × R = V² ÷ R all agree. It flags any value that's negative, absurdly tiny or huge (the `RANGES` at the top), and prints the smallest and largest value it saw for each.
 
 ## Phone can't connect (local runs only)
 
@@ -170,9 +275,10 @@ If the page loads on the computer but the phone times out, the Wi-Fi probably bl
 | Path | Purpose |
 |---|---|
 | `app.py` | Flask server (stateless JSON API) |
-| `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`) plus the `CHAPTERS` registry |
-| `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker) |
-| `static/` | Front end, no build step: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), `instruments.js` (meters, the formula ring, lamps, the needle animation) |
+| `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`, `kwh.py`, `circuits.py`) plus the `CHAPTERS` registry |
+| `chapters/kwh_appliances.csv` | The Household kWh appliance list: ratings and hours. See [Edit the appliance list](#edit-the-appliance-list) |
+| `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker), `problems.py` (problem sets) |
+| `static/` | Front end, no build step: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), `problems.js` (problem sets: the kWh table, the circuit SVG), `instruments.js` (meters, the formula ring, lamps, the needle animation) |
 | `static/fonts/` | Fonts used by the site, with their licenses in `OFL.txt` |
 | `run.sh`, `run.bat` | Run the site on your own computer for testing, with live reload |
 | `scripts/keepalive.py` | Pings the site so it stays awake |
