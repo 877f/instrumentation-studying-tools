@@ -106,6 +106,16 @@ def close(a, b, tol=TOLERANCE):
     return b != 0 and abs(a - b) <= tol * abs(b)
 
 
+def tolerance(t):
+    """The template's own tolerance if its Kind sets one, otherwise the default 1%."""
+    return t.kind.tolerance or TOLERANCE
+
+
+def shown(t, x, quantity=None):
+    """The answer as it's displayed: the Kind's own format if it has one, otherwise fmt_answer."""
+    return (t.kind.shown or fmt_answer)(x, quantity or t.quantity)
+
+
 def diagnose(t, value, correct, parsed, raw):
     """Explain a wrong answer as specifically as possible."""
     q = QUANTITIES[t.quantity]
@@ -141,15 +151,16 @@ def diagnose(t, value, correct, parsed, raw):
     if t.kind.reciprocal and any(close(value * correct, 10.0 ** j) for j in range(-12, 13)):
         return "That looks like the value you started with. Take the reciprocal: " + t.hint()
 
+    pct = f"{tolerance(t) * 100:g}%"
     if abs(r - 1) <= 0.05:
-        return ("Close, but outside the 1% tolerance. Avoid rounding the in-between steps; "
+        return (f"Close, but outside the {pct} tolerance. Avoid rounding the in-between steps; "
                 "keep full digits until the end.")
-    return "Not within 1% of the correct answer. Compare your steps with the worked solution."
+    return f"Not within {pct} of the correct answer. Compare your steps with the worked solution."
 
 
 def _base(t, params):
     correct, steps = t.solve(params)
-    return correct, {"correct_answer": fmt_answer(correct, t.quantity), "steps": steps, "notes": t.notes(params),
+    return correct, {"correct_answer": shown(t, correct), "steps": steps, "notes": t.notes(params),
                      "read_as": None, "message": None, "alternate": False}
 
 
@@ -163,11 +174,12 @@ def check(t, params, raw):
         return result
     result["read_as"] = f"{fmt_num(parsed.value, 4)} {QUANTITIES[parsed.unit_q or q].unit}"
 
+    tol = tolerance(t)
     for alt in t.alternates_for(params):
-        if parsed.unit_q in (None, alt["quantity"]) and close(parsed.value, alt["value"]):
+        if parsed.unit_q in (None, alt["quantity"]) and close(parsed.value, alt["value"], tol):
             result.update(status="correct", alternate=True,
                           message=f"Accepted under the other reading: you gave {alt['label']}. "
-                                  f"The main reading is {fmt_answer(correct, q)}. Check which one your teacher wants.")
+                                  f"The main reading is {shown(t, correct)}. Check which one your teacher wants.")
             return result
 
     if parsed.unit_q is not None and parsed.unit_q != q:
@@ -176,7 +188,7 @@ def check(t, params, raw):
         result.update(status="incorrect", message=f"Wrong kind of unit: that's {given}, but this asks for {wanted}.")
         return result
 
-    if close(parsed.value, correct):
+    if close(parsed.value, correct, tol):
         result["status"] = "correct"
     else:
         result.update(status="incorrect", message=diagnose(t, parsed.value, correct, parsed, raw))

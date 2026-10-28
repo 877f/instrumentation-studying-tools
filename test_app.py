@@ -84,6 +84,41 @@ def grader_tests():
     expect(9, "6 zz", "unparsed", "unit")
 
 
+def calc_tests():
+    """Electrical Calculations: prefixes or not, 0.5% tolerance, 3-sig-fig engineering answers."""
+    calc = CHAPTERS["calc"]
+    by_label = {t.label: t for t in calc.templates}
+
+    def want(label, raw, status, contains=None):
+        t = by_label[label]
+        res = grader.check(t, t.worksheet, raw)
+        if res["status"] != status or (contains and contains.lower() not in (res["message"] or "").lower()):
+            failures.append(f"calc #{label} {raw!r}: expected {status} {contains or ''}, got {res['status']}: {res['message']}")
+        return res
+
+    for raw in ["0.5", "0.5 A", "500 mA", "500m", "500 milliamps", ".5A", "5e-1"]:
+        want("3a", raw, "correct")                                    # 500 mA
+    want("3a", "500", "incorrect", "500 mA")                          # forgot the prefix: says to type it
+    for raw in ["3.6 kW", "3600", "3,600 W", "3.60k"]:
+        want("4a", raw, "correct")
+    want("9a", "3.24", "correct")                                     # 0.39% off: inside 0.5%
+    want("9a", "3.25", "incorrect", "0.5% tolerance")                 # 0.70% off: outside
+    want("12b", "40 mW", "correct")
+    want("12b", "0.04", "correct")
+    for raw in ["80", "80%", "80 %", "80 percent"]:
+        want("36", raw, "correct")
+    want("36", "0.8", "incorrect", "power of 10")
+    for raw in ["50", "50 h", "50 hours", "3000 min"]:
+        want("41", raw, "correct")
+    want("42", "0.0144", "incorrect", "power of 10")                  # used 500 instead of 0.5 A
+    shown = {lbl: grader.reveal(by_label[lbl], by_label[lbl].worksheet)["correct_answer"] for lbl in ("3a", "4a", "12b")}
+    if shown != {"3a": "500 mA", "4a": "3.60 kW", "12b": "40.0 mW"}:
+        failures.append(f"calc answers not in 3-sig-fig engineering notation: {shown}")
+    # Chapter 2 keeps its own 1% tolerance and its usual answer format.
+    if grader.check(CH2.by_id[9], CH2.by_id[9].worksheet, "6.05")["status"] != "correct":
+        failures.append("ch2 #9 '6.05' (0.83% off) should still be correct at 1%")
+
+
 def api_tests():
     c = server.app.test_client()
 
@@ -140,6 +175,26 @@ def api_tests():
     check(session(mode="weak", parts=[2], count=3, stats={"x": "junk", "5": None}).status_code == 200,
           "junk stats ignored")
     formula_api_tests(c, check)
+    calc_api_tests(c, check)
+
+
+def calc_api_tests(c, check):
+    """Electrical Calculations through the API: labels, per-part practice, a full run, missed review."""
+    d = c.get("/api/chapters/calc").get_json()
+    check(d["name"] == "Chapter 3" and d["tag"] == "CH 3" and len(d["templates"]) == 75
+          and set(d["parts"]) == {"1", "2", "3", "4"}, "calc detail: 75 questions in 4 parts")
+    check([t["label"] for t in d["templates"]][:3] == ["1a", "1b", "2a"] and d["templates"][-1]["label"] == "45",
+          "calc labels 1a, 1b ... 45")
+    full = c.post("/api/session", json={"chapter": "calc", "mode": "worksheet", "parts": [1, 2, 3, 4]}).get_json()
+    check(len(full["questions"]) == 75 and full["questions"][0]["label"] == "1a", "calc full worksheet run, in order")
+    part3 = c.post("/api/session", json={"chapter": "calc", "mode": "variations", "parts": [3]}).get_json()
+    check(len(part3["questions"]) == 5 and {q["part"] for q in part3["questions"]} == {3}, "calc one-section practice")
+    review = c.post("/api/session", json={"chapter": "calc", "mode": "variations", "template_ids": [5, 61]}).get_json()
+    check({q["label"] for q in review["questions"]} == {"3a", "31"}, "calc missed-question review")
+    q = full["questions"][4]
+    r = c.post("/api/check", json={"chapter": "calc", "template_id": q["template_id"], "params": q["params"],
+                                   "answer": "500m"}).get_json()
+    check(r["status"] == "correct" and r["correct_answer"] == "500 mA", "calc #3a: 500m is right, shown as 500 mA")
 
 
 def formula_api_tests(c, check):
@@ -184,6 +239,7 @@ def formula_api_tests(c, check):
 
 def main():
     grader_tests()
+    calc_tests()
     api_tests()
     if failures:
         print(f"{len(failures)} FAILURE(S):")

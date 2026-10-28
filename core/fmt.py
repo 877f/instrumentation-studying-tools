@@ -45,6 +45,15 @@ def fmt_eng(x, unit, sig=3):
     return f"{_plain(d.scaleb(-exp3))} {ENG_PREFIX[exp3]}{unit}"
 
 
+def fmt_sf(x, unit, sig=3, prefix=True):
+    """Exactly `sig` significant figures with trailing zeros kept, in engineering notation:
+    0.5 A -> 500 mA, 3600 W -> 3.60 kW, 24 V -> 24.0 V. prefix=False keeps the unit as is (80.0 %)."""
+    d = round_sig(x, sig)
+    exp3 = max(-12, min(9, (d.adjusted() // 3) * 3)) if prefix else 0
+    m = d.scaleb(-exp3)
+    return f"{m:.{max(0, sig - 1 - m.adjusted())}f} {ENG_PREFIX[exp3]}{unit}"
+
+
 def fmt_answer(x, quantity):
     """Final answer to 3 sig figs, plus a prefixed form where the quantity uses one."""
     q = QUANTITIES[quantity]

@@ -18,7 +18,7 @@ FIELD_FORMATS = {
 class Kind:
     """A problem type: what it asks for, how to solve it, how to make new numbers."""
 
-    def __init__(self, quantity, fields, hint, gen, solve, slips=None, reciprocal=False):
+    def __init__(self, quantity, fields, hint, gen, solve, slips=None, reciprocal=False, tolerance=None, shown=None):
         self.quantity = quantity      # key in core.units.QUANTITIES
         self.fields = fields          # given -> display format (FIELD_FORMATS key or fn)
         self.hint = hint              # str, or fn(cfg) -> str. Formula only, never the answer
@@ -26,13 +26,16 @@ class Kind:
         self.solve = solve            # fn(givens, cfg) -> (answer, [worked-solution steps])
         self.slips = slips            # fn(cfg) -> [(factor, message)] for common dropped conversions
         self.reciprocal = reciprocal  # answer is 1/x of a given (catches "forgot the reciprocal")
+        self.tolerance = tolerance    # fraction accepted either side; None = the grader's 1%
+        self.shown = shown            # fn(value, quantity) -> answer text; None = core.fmt.fmt_answer
 
 
 class Template:
     """One worksheet question: fixed wording, worksheet numbers, and a Kind to solve it."""
 
-    def __init__(self, id, part, text, kind, worksheet, cfg=None, note=None, alternates=None):
+    def __init__(self, id, part, text, kind, worksheet, cfg=None, note=None, alternates=None, label=None):
         self.id = id
+        self.label = label or str(id)  # shown as "#1a"; the id stays a number for saved progress
         self.part = part
         self.text = text              # "... {N} electrons ...", placeholders = Kind.fields
         self.kind = kind
@@ -81,6 +84,7 @@ class Template:
         return {
             "chapter": chapter.id,
             "template_id": self.id,
+            "label": self.label,
             "part": self.part,
             "part_title": chapter.parts[self.part].title,
             "text": self.render(params),
@@ -104,10 +108,13 @@ class Chapter:
 
     type = "worksheet"
 
-    def __init__(self, id, number, title, parts, templates, formulas=()):
+    def __init__(self, id, number, title, parts, templates, formulas=(), name=None, kicker=None, tag=None):
         self.id = id                  # URL-safe, e.g. "ch2"
         self.number = number
         self.title = title
+        self.name = name or f"Chapter {number}"   # in sentences: "Reset Chapter 2 progress"
+        self.kicker = kicker or self.name         # small label above the title
+        self.tag = tag or f"CH {number}"          # meter nameplate and question label
         self.parts = parts            # {1: Part, 2: Part, ...}
         self.templates = templates
         self.formulas = formulas      # [{"title", "items": [{"name", "formula", "note"}]}]
@@ -117,6 +124,7 @@ class Chapter:
 
     def summary(self):
         return {"id": self.id, "type": self.type, "number": self.number, "title": self.title,
+                "name": self.name, "kicker": self.kicker, "tag": self.tag,
                 "question_count": len(self.templates), "part_count": len(self.parts)}
 
     def detail(self):
@@ -124,6 +132,7 @@ class Chapter:
             **self.summary(),
             "parts": {str(n): {"title": p.title, "short": p.short,
                                "count": sum(t.part == n for t in self.templates)} for n, p in self.parts.items()},
-            "templates": [{"id": t.id, "part": t.part, "text": t.render(t.worksheet)} for t in self.templates],
+            "templates": [{"id": t.id, "label": t.label, "part": t.part, "text": t.render(t.worksheet)}
+                          for t in self.templates],
             "formulas": list(self.formulas),
         }

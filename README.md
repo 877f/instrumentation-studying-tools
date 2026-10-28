@@ -4,7 +4,7 @@ Practice problems with worked solutions for our electronics class. It's live at 
 
 The home screen lists the study modules. There are three kinds:
 
-- **Worksheet chapters**, such as Chapter 2: numeric problems from a worksheet, explained below.
+- **Worksheet chapters**, such as Chapter 2 and [Chapter 3: Electrical Calculations](#chapter-3-electrical-calculations): numeric problems from a worksheet, explained below.
 - **Formula drills**, such as the Ohm's Law Wheel: you type formulas from memory. See [Ohm's Law Wheel](#ohms-law-wheel).
 - **Problem sets**, such as [Household kWh](#household-kwh) and [Circuit Diagrams](#circuit-diagrams): levels of problems with several answer boxes, drawn as a table or a circuit.
 
@@ -29,7 +29,32 @@ Units are optional. Without a unit, the answer is read in the unit shown in the 
 - Length and time units are converted: `80 yd` counts as 240 ft, `2 min` counts as 120 s
 - In Household kWh: `1,000 Wh` counts as 1 kWh, `90 min` as 1.5 h, and money can be `$21.77`, `21.77` or `2177¢`
 
-Answers within 1% are marked correct, and answers are shown to 3 significant figures. When an answer is off by a power of 10 or by a forgotten conversion, the feedback says which one.
+Answers within 1% are marked correct (0.5% in Chapter 3), and answers are shown to 3 significant figures. When an answer is off by a power of 10 or by a forgotten conversion, the feedback says which one.
+
+## Chapter 3: Electrical Calculations
+
+Chapter 3 is the Instrumentation, Automation & Robotics practice worksheet: 45 questions in four parts, which are the worksheet's sections.
+
+| Part | Questions |
+|---|---|
+| 1 · Ohm's Law and Watt's Law | 1–30. Each has parts (a) and (b), graded separately as #1a, #1b and so on, so Part 1 has 60 |
+| 2 · Energy in kWh | 31–35 |
+| 3 · Efficiency | 36–40 |
+| 4 · Battery Life from Amp-Hours | 41–45. 43–45 are bonus questions |
+
+It works like Chapter 2: pick parts for one section or all four, use Worksheet, Variations or Weak spots, and review missed questions from the Progress tab or the results screen. Two things are different:
+
+- **Tolerance:** answers within **0.5%** count, instead of 1%. A correctly rounded 3-significant-figure answer is always inside 0.5%.
+- **Answers are shown** to 3 significant figures in engineering notation, keeping trailing zeros: `500 mA`, `3.60 kW`, `24.0 V`, `40.0 mW`. You can type them any way: `0.5`, `0.5 A`, `500 mA` and `500m` are all right for 500 mA. Efficiency takes `80`, `80%` or `80 %`. Hours take `50`, `50 h` or `3000 min`.
+
+Choices I made:
+
+- **Bonus questions 43–45** were written to fit the three answer-key entries that had no question: 20 Ah at 1.5 A (13.3 h), 5 Ah at 750 mA (6.67 h), and 40 Ah at 4 A (10.0 h).
+- **Hints** say which law to use in words, such as "Ohm's law, solved for the current", and never write the formula. The worked solution after Check shows the formula, the numbers plugged in, and the answer. The Formulas tab has the full sheet.
+- **New numbers** for Part 1 stay near the worksheet's own values, so an LED question keeps LED-sized numbers.
+- **Hours** show as `h`, as in `50.0 h`.
+
+The questions are in `chapters/calc.py`. `test_worksheet.py` checks every answer against the worksheet's key, both the value and how it's written.
 
 ## Ohm's Law Wheel
 
@@ -183,19 +208,24 @@ Every module is **one data file in `chapters/` plus one line in `CHAPTERS` in `c
 | Formulas to learn by heart | `chapters/ohms_wheel.py` |
 | Problems with several answer boxes, a table or a diagram | `chapters/kwh.py` (a table) or `chapters/circuits.py` (a circuit) |
 
-### A worksheet chapter (numeric problems), for example Chapter 3
+### A worksheet chapter (numeric problems), for example Chapter 4
 
-1. Copy `chapters/ch02.py` to `chapters/ch03.py`.
+1. Copy `chapters/ch02.py` to `chapters/ch04.py`.
 2. In the copy, replace these:
    - `PARTS`
    - `KINDS`: the problem types and their solvers
    - `TEMPLATES`: the worksheet questions
    - `FORMULAS`: the formula sheet
-3. At the bottom of the copy, set `Chapter("ch3", 3, "Title", ...)`.
-4. In `chapters/__init__.py`, import `ch03` and add `ch03.CHAPTER` to `CHAPTERS`.
+3. At the bottom of the copy, set `Chapter("ch4", 4, "Title", ...)`. For a worksheet that isn't a numbered chapter, also pass `name=`, `kicker=` and `tag=` so the site doesn't call it "Chapter N".
+4. In `chapters/__init__.py`, import `ch04` and add `ch04.CHAPTER` to `CHAPTERS`.
 5. If the chapter needs a new unit, add it to `QUANTITIES` in `core/units.py`. Watts were added this way.
 6. Optionally, add a hand-calculated answer key to `KEYS` in `test_worksheet.py`.
-7. Run `py test_worksheet.py ch3`. It prints every worksheet answer and checks 300 random variations of each question.
+
+Optional settings:
+
+- **A different tolerance or answer format:** pass `tolerance=` and `shown=` to `Kind`. `chapters/calc.py` uses 0.5% and 3-sig-fig engineering notation.
+- **Questions with parts (a) and (b):** make one template per part and give each a `label=`, such as `"1a"`. The label is what the site shows.
+7. Run `py test_worksheet.py ch4`. It prints every worksheet answer and checks 300 random variations of each question.
 
 ### A formula drill, for example another formula wheel
 
@@ -275,7 +305,7 @@ If the page loads on the computer but the phone times out, the Wi-Fi probably bl
 | Path | Purpose |
 |---|---|
 | `app.py` | Flask server (stateless JSON API) |
-| `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`, `kwh.py`, `circuits.py`) plus the `CHAPTERS` registry |
+| `chapters/` | One data file per module (`ch02.py`, `ohms_wheel.py`, `kwh.py`, `circuits.py`, `calc.py`) plus the `CHAPTERS` registry |
 | `chapters/kwh_appliances.csv` | The Household kWh appliance list: ratings and hours. See [Edit the appliance list](#edit-the-appliance-list) |
 | `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker), `problems.py` (problem sets) |
 | `static/` | Front end, no build step: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), `problems.js` (problem sets: the kWh table, the circuit SVG), `instruments.js` (meters, the formula ring, lamps, the needle animation) |

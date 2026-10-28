@@ -46,6 +46,7 @@ QUANTITIES = {
                       {"h": 1, "hr": 1, "hrs": 1, "hour": 1, "hours": 1, "min": 1 / 60, "mins": 1 / 60,
                        "minute": 1 / 60, "minutes": 1 / 60, "s": 1 / 3600, "sec": 1 / 3600, "secs": 1 / 3600,
                        "second": 1 / 3600, "seconds": 1 / 3600}, prefixable=False),
+    "percent": Quantity("efficiency", "%", "percent (%)", {"%": 1, "percent": 1, "pct": 1}, prefixable=False),
     "cost": Quantity("cost", "$", "dollars ($)",
                      {"$": 1, "dollar": 1, "dollars": 1, "usd": 1, "¢": 0.01, "c": 0.01, "ct": 0.01, "cts": 0.01,
                       "cent": 0.01, "cents": 0.01}, prefixable=False),

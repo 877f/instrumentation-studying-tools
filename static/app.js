@@ -54,6 +54,8 @@ function ago(iso) {
   if (s < 86400) return Math.floor(s / 3600) + ' h ago';
   return Math.floor(s / 86400) + ' d ago';
 }
+function chName(s) { return s.chapterName || `Chapter ${s.chapterNumber}`; }
+function chTag(s) { return s.chapterTag || `CH ${s.chapterNumber}`; }
 function saveSess() { sess ? store.set(KEYS.session, sess) : store.del(KEYS.session); }
 function scrollToEl(el) { el.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' }); }
 
@@ -145,7 +147,7 @@ function resumeBanner(cid) {
   if (!sess || (cid && sess.chapter !== cid)) return '';
   return `<div class="resume">${lamp('amber', 'blink')}
     <div class="resume-text"><b>Resume ${MODES[sess.mode].label}</b>
-      <span>Chapter ${sess.chapterNumber} · question ${sess.idx + 1} of ${sess.questions.length}</span></div>
+      <span>${esc(chName(sess))} · question ${sess.idx + 1} of ${sess.questions.length}</span></div>
     <div class="row"><button class="link" id="dropBtn">Discard</button><a class="btn primary" href="#/quiz">Resume</a></div></div>`;
 }
 function bindResume() {
@@ -157,15 +159,15 @@ function bindResume() {
 function chapterMeter(c, mastered, cls = '') {
   const total = c.question_count;
   return `<div class="bezel ${cls}">${meterSVG({ key: 'ch:' + c.id, value: mastered, max: total, legend: 'MASTERED',
-    tag: `CH ${c.number}`, readout: `${mastered} OF ${total}`,
-    label: `Chapter ${c.number}: ${mastered} of ${total} questions mastered` })}</div>`;
+    tag: c.tag, readout: `${mastered} OF ${total}`,
+    label: `${c.name}: ${mastered} of ${total} questions mastered` })}</div>`;
 }
 
 function chapterBay(c) {
   const m = Math.min(masteredCount(c.id), c.question_count);
   const seen = lastSeen(c.id);
   return `<a class="bay" href="#/${esc(c.id)}">${chapterMeter(c, m)}
-    <div class="bay-body"><div class="label">Chapter ${c.number} · ${plural(c.part_count, 'part')}</div>
+    <div class="bay-body"><div class="label">${esc(c.kicker)} · ${plural(c.part_count, 'part')}</div>
       <h2 class="bay-title">${esc(c.title)}</h2>
       <p class="bay-meta">${c.question_count} questions · ${seen ? `practiced ${ago(seen)}` : 'not started yet'}</p>
       <span class="bay-go">${seen ? 'Keep practicing' : 'Start practicing'}</span></div></a>`;
@@ -213,7 +215,7 @@ async function chapterView(cid, tab, token) {
   app.innerHTML = `${rail('#/', 'Chapters')}
     <div class="ch-grid">
       <header class="page-head"><div class="head-row">
-        <div class="head-text"><div class="label">Chapter ${c.number}</div><h1>${esc(c.title)}</h1></div>
+        <div class="head-text"><div class="label">${esc(c.kicker)}</div><h1>${esc(c.title)}</h1></div>
         <div class="head-meter"><div class="bezel">${miniMeterSVG({ key: 'mini:' + c.id, value: m, max: c.question_count,
           label: `${m} of ${c.question_count} mastered` })}</div><span>${m}/${c.question_count}</span></div>
       </div></header>
@@ -314,13 +316,13 @@ function progressTab(c, el) {
       return `<details class="face part"><summary>${band(+n)}<span>Part ${n} · ${esc(p.short)}</span>
           <span class="pm">${rows.filter((t) => t.s.last_correct).length}/${rows.length} mastered</span></summary>
         <ul class="rows">${rows.map((t) => `
-          <li><span class="id">#${t.id}</span><span class="txt">${rich(t.text)}</span>
+          <li><span class="id">#${esc(t.label)}</span><span class="txt">${rich(t.text)}</span>
             <span class="stat">${t.s.attempts
               ? `${lamp(t.s.last_correct ? 'go' : 'stop')}<span>${t.s.correct}/${t.s.attempts}<small>${ago(t.s.last_seen)}</small></span>`
               : '<small>not tried</small>'}</span></li>`).join('')}
         </ul></details>`;
     }).join('')}
-    ${answered ? `<p class="reset"><button class="link danger" id="resetBtn">Reset Chapter ${c.number} progress</button></p>` : ''}`;
+    ${answered ? `<p class="reset"><button class="link danger" id="resetBtn">Reset ${esc(c.name)} progress</button></p>` : ''}`;
   if (missed.length) {
     $('missBtn').onclick = () => startSession(c, {
       mode: 'variations', template_ids: missed.map((t) => t.id), count: 'all', shuffle: true,
@@ -328,7 +330,7 @@ function progressTab(c, el) {
   }
   if (answered) {
     $('resetBtn').onclick = () => {
-      if (!confirm(`Reset your Chapter ${c.number} progress on this device?`)) return;
+      if (!confirm(`Reset your ${c.name} progress on this device?`)) return;
       delete progress.chapters[c.id];
       store.set(KEYS.progress, progress);
       render();
@@ -341,8 +343,8 @@ async function startSession(c, opts) {
   if (btn) btn.disabled = true;
   try {
     const r = await api('/api/session', { chapter: c.id, ...opts, stats: chProg(c.id).templates });
-    sess = { chapter: c.id, chapterNumber: c.number, mode: r.mode, questions: r.questions,
-             idx: 0, results: [], answered: false, feedback: null };
+    sess = { chapter: c.id, chapterNumber: c.number, chapterName: c.name, chapterTag: c.tag, mode: r.mode,
+             questions: r.questions, idx: 0, results: [], answered: false, feedback: null };
     saveSess();
     go('#/quiz');
   } catch (e) {
@@ -386,9 +388,9 @@ function quizView() {
       <span class="qcount">${sess.idx + 1}/${n}</span>
     </div>
     <article class="face qcard">
-      <div class="label">${band(q.part)}Ch ${sess.chapterNumber} · Part ${q.part}: ${esc(q.part_title)}</div>
+      <div class="label">${band(q.part)}${esc(chTag(sess))} · Part ${q.part}: ${esc(q.part_title)}</div>
       <p class="qtext">${rich(q.text)}</p>
-      <div class="qtags">#${q.template_id} · ${q.varied ? 'new numbers' : 'worksheet numbers'}${h.attempts ? ` · ${h.correct}/${h.attempts} right before` : ''}</div>
+      <div class="qtags">#${esc(q.label ?? q.template_id)} · ${q.varied ? 'new numbers' : 'worksheet numbers'}${h.attempts ? ` · ${h.correct}/${h.attempts} right before` : ''}</div>
       <form id="ansForm" autocomplete="off">
         <div class="ansrow">
           <input id="ans" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
@@ -402,7 +404,7 @@ function quizView() {
       <div id="err" class="alert bad" hidden></div>
       <div class="links"><button class="link" id="hintBtn" type="button">Hint</button>
         <button class="link" id="giveBtn" type="button">Show answer</button></div>
-      <div id="hint" class="hint" hidden><b>Formula:</b> ${rich(q.hint)}</div>
+      <div id="hint" class="hint" hidden><b>Hint:</b> ${rich(q.hint)}</div>
     </article>
     <div id="fb" aria-live="polite"></div>
   </div>`;
@@ -482,7 +484,7 @@ function finishQuestion(res, raw) {
   record(sess.chapter, q.template_id, ok);
   sess.answered = true;
   sess.feedback = { res, your: raw };
-  sess.results.push({ template_id: q.template_id, part: q.part, text: q.text, correct: ok,
+  sess.results.push({ template_id: q.template_id, label: q.label ?? q.template_id, part: q.part, text: q.text, correct: ok,
                       revealed: res.status === 'revealed', alternate: !!res.alternate, your: raw,
                       correct_answer: res.correct_answer });
   saveSess();
@@ -546,20 +548,20 @@ function summaryView() {
   const missed = res.filter((r) => !r.correct);
   const alts = res.filter((r) => r.alternate);
   const skipped = d.questions.length - res.length;
-  app.innerHTML = `${rail(`#/${esc(d.chapter)}`, `Chapter ${d.chapterNumber}`)}
+  app.innerHTML = `${rail(`#/${esc(d.chapter)}`, chName(d))}
     <section class="score">
       <div class="bezel">${meterSVG({ key: 'summary', value: correct, max: res.length, legend: 'CORRECT',
-        tag: `CH ${d.chapterNumber}`, readout: `${correct} OF ${res.length}`, label: `${correct} of ${res.length} correct` })}</div>
-      <div><div class="label">${MODES[d.mode].label} · Chapter ${d.chapterNumber}</div>
+        tag: chTag(d), readout: `${correct} OF ${res.length}`, label: `${correct} of ${res.length} correct` })}</div>
+      <div><div class="label">${MODES[d.mode].label} · ${esc(chName(d))}</div>
         <div class="big">${correct}/${res.length}</div>
         <div class="sub">${pct(correct, res.length)} correct${skipped ? ` · ${skipped} not answered` : ''}</div></div>
     </section>
     ${missed.length ? `<section class="face list-card"><h2 class="label">Missed · ${missed.length}</h2>
-      <ul class="rows two">${missed.map((r) => `<li><span class="id">#${r.template_id}</span><div>${rich(r.text)}
+      <ul class="rows two">${missed.map((r) => `<li><span class="id">#${esc(r.label ?? r.template_id)}</span><div>${rich(r.text)}
         <div class="v-you">Answer <span class="mono">${rich(r.correct_answer)}</span> · you: ${r.revealed ? 'showed answer'
           : `<span class="mono">${esc(r.your)}</span>`}</div></div></li>`).join('')}
       </ul></section>` : `<p class="good">${lamp('go', 'strike')}No misses. Nice work.</p>`}
-    ${alts.length ? `<p class="help">Accepted under the other reading of the wording: ${alts.map((r) => '#' + r.template_id).join(', ')}.
+    ${alts.length ? `<p class="help">Accepted under the other reading of the wording: ${alts.map((r) => '#' + esc(r.label ?? r.template_id)).join(', ')}.
       Check which one your teacher wants.</p>` : ''}
     <div class="stack">
       ${missed.length ? `<button class="btn primary block" id="retrySame">Retry missed · same numbers</button>
@@ -569,12 +571,13 @@ function summaryView() {
   animateInstruments(app);
   if (!missed.length) return;
   $('retrySame').onclick = () => {
-    sess = { chapter: d.chapter, chapterNumber: d.chapterNumber, mode: d.mode, idx: 0, results: [],
-             answered: false, feedback: null, questions: d.questions.filter((q, i) => res[i] && !res[i].correct) };
+    sess = { chapter: d.chapter, chapterNumber: d.chapterNumber, chapterName: d.chapterName, chapterTag: d.chapterTag,
+             mode: d.mode, idx: 0, results: [], answered: false, feedback: null,
+             questions: d.questions.filter((q, i) => res[i] && !res[i].correct) };
     saveSess();
     go('#/quiz');
   };
-  $('retryNew').onclick = () => startSession({ id: d.chapter, number: d.chapterNumber }, {
+  $('retryNew').onclick = () => startSession({ id: d.chapter, number: d.chapterNumber, name: chName(d), tag: chTag(d) }, {
     mode: 'variations', template_ids: [...new Set(missed.map((r) => r.template_id))], count: 'all', shuffle: true,
   });
 }
