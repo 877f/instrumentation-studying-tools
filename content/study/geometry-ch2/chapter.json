@@ -1,0 +1,179 @@
+{
+  "id": "geometry-ch2",
+  "number": 2,
+  "title": "Geometry",
+  "name": "Geometry",
+  "kicker": "Technical Math · Chapter 2",
+  "tag": "GEOM",
+  "intro": "Angles and lines, triangles, quadrilaterals and circles. Every problem gets fresh numbers, and every answer is worked out step by step.",
+  "textbook": "ch2-textbook.json",
+  "sections": [
+    {
+      "id": "2.1",
+      "title": "Angles and lines",
+      "topics": "Acute, right, obtuse and straight angles · complements and supplements · vertical angles · parallel lines and a transversal · truss angles",
+      "formulas": [
+        {"title": "Kinds of angles", "items": [
+          {"name": "Acute", "formula": "less than 90°"},
+          {"name": "Right", "formula": "exactly 90°", "note": "Drawn with a small square in the corner."},
+          {"name": "Obtuse", "formula": "between 90° and 180°"},
+          {"name": "Straight", "formula": "exactly 180°", "note": "Its two sides point opposite ways along one line."},
+          {"name": "Naming", "formula": "∠ABC = ∠CBA", "note": "The vertex is the middle letter."}
+        ]},
+        {"title": "Angle pairs", "items": [
+          {"name": "Complementary", "formula": "α + β = 90°"},
+          {"name": "Supplementary", "formula": "α + β = 180°"},
+          {"name": "Vertical angles", "formula": "equal", "note": "The opposite angles where two lines cross."},
+          {"name": "Angles along a straight line", "formula": "add up to 180°"},
+          {"name": "Adjacent angles", "formula": "share a vertex and a side", "note": "And don't overlap."}
+        ]},
+        {"title": "Parallel lines cut by a transversal", "items": [
+          {"name": "Corresponding angles", "formula": "equal", "note": "Same position at each crossing."},
+          {"name": "Alternate interior angles", "formula": "equal", "note": "Between the parallels, on opposite sides of the transversal."},
+          {"name": "Same-side interior angles", "formula": "add up to 180°"}
+        ]},
+        {"title": "Triangles", "items": [
+          {"name": "Angle sum", "formula": "∠A + ∠B + ∠C = 180°"},
+          {"name": "Right triangle", "formula": "the two acute angles add up to 90°"}
+        ]}
+      ],
+      "flashcards": [
+        {"front": "Acute angle", "back": "Less than 90°"},
+        {"front": "Right angle", "back": "Exactly 90°, marked with a small square"},
+        {"front": "Obtuse angle", "back": "More than 90° and less than 180°"},
+        {"front": "Straight angle", "back": "Exactly 180°"},
+        {"front": "Complementary angles", "back": "Two angles that add up to 90°"},
+        {"front": "Supplementary angles", "back": "Two angles that add up to 180°"},
+        {"front": "Vertical angles", "back": "The opposite angles where two lines cross. They are equal."},
+        {"front": "Adjacent angles", "back": "Share a vertex and one side, and don't overlap"},
+        {"front": "Perpendicular lines", "back": "Lines that meet at a right angle"},
+        {"front": "Transversal", "back": "A line that crosses two or more other lines"},
+        {"front": "Corresponding angles (parallel lines)", "back": "Equal: the same position at each crossing"},
+        {"front": "Alternate interior angles (parallel lines)", "back": "Equal: between the parallels, on opposite sides of the transversal"},
+        {"front": "Same-side interior angles (parallel lines)", "back": "Add up to 180°"},
+        {"front": "In ∠ABC, which point is the vertex?", "back": "B, the middle letter. ∠ABC and ∠CBA are the same angle."}
+      ]
+    },
+    {
+      "id": "2.2",
+      "title": "Triangles",
+      "topics": "Angle sum · area from base and height · Heron's formula · perimeter · Pythagorean theorem · right-triangle trig",
+      "formulas": [
+        {"title": "Angles", "items": [
+          {"name": "Angle sum", "formula": "∠A + ∠B + ∠C = 180°"},
+          {"name": "Isosceles", "formula": "base angles are equal", "note": "They sit opposite the two equal sides."}
+        ]},
+        {"title": "Area", "items": [
+          {"name": "Base and height", "formula": "A = ½bh", "note": "The height is perpendicular to the base, and may fall outside the triangle."},
+          {"name": "Heron's formula (three sides)", "formula": "s = (a + b + c) / 2\nA = √(s(s − a)(s − b)(s − c))", "note": "Keep every digit of s. Round only the final answer."},
+          {"name": "Right triangle", "formula": "A = ½ab", "note": "a and b are the legs."},
+          {"name": "Isosceles", "formula": "h = √(leg² − (base / 2)²)\nA = ½ × base × h"},
+          {"name": "Equilateral", "formula": "A = (√3 / 4)s²"}
+        ]},
+        {"title": "Perimeter", "items": [
+          {"name": "Any triangle", "formula": "p = a + b + c"},
+          {"name": "Equilateral", "formula": "p = 3s"}
+        ]},
+        {"title": "Right triangles", "items": [
+          {"name": "Pythagorean theorem", "formula": "c² = a² + b²", "note": "c is the hypotenuse, across from the right angle."},
+          {"name": "A missing leg", "formula": "a = √(c² − b²)"},
+          {"name": "Tangent", "formula": "tan θ = opposite / adjacent"},
+          {"name": "Cosine", "formula": "cos θ = adjacent / hypotenuse"}
+        ]}
+      ],
+      "flashcards": [
+        {"front": "Angles of a triangle", "back": "Add up to 180°"},
+        {"front": "Isosceles triangle", "back": "Two equal sides, and the two angles opposite them are equal"},
+        {"front": "Equilateral triangle", "back": "All three sides equal, all three angles 60°"},
+        {"front": "Scalene triangle", "back": "No two sides equal"},
+        {"front": "Hypotenuse", "back": "The longest side of a right triangle, across from the right angle"},
+        {"front": "Area from base and height", "back": "A = ½bh"},
+        {"front": "Heron's formula", "back": "s = (a + b + c) / 2\nA = √(s(s − a)(s − b)(s − c))"},
+        {"front": "When do you need Heron's formula?", "back": "When you know all three sides but no height"},
+        {"front": "Equilateral triangle area", "back": "A = (√3 / 4)s²"},
+        {"front": "Pythagorean theorem", "back": "c² = a² + b²"},
+        {"front": "Pythagorean triples", "back": "3-4-5, 5-12-13, 8-15-17, 7-24-25 (and their multiples)"},
+        {"front": "tan θ", "back": "opposite / adjacent"},
+        {"front": "cos θ", "back": "adjacent / hypotenuse"},
+        {"front": "Perimeter", "back": "The distance around: add all the sides"}
+      ]
+    },
+    {
+      "id": "2.3",
+      "title": "Quadrilaterals",
+      "topics": "Perimeter and area of the square, rhombus, rectangle, parallelogram and trapezoid · formulas for composite figures",
+      "formulas": [
+        {"title": "Perimeter", "items": [
+          {"name": "Square", "formula": "p = 4s"},
+          {"name": "Rhombus", "formula": "p = 4s"},
+          {"name": "Rectangle", "formula": "p = 2(l + w)"},
+          {"name": "Parallelogram", "formula": "p = 2(b + side)", "note": "The slanted side, not the height."},
+          {"name": "Trapezoid", "formula": "p = sum of all four sides"},
+          {"name": "Watch out", "formula": "the height is never a side", "note": "A dashed height in a perimeter problem is there to catch you."}
+        ]},
+        {"title": "Area", "items": [
+          {"name": "Square", "formula": "A = s²"},
+          {"name": "Rectangle", "formula": "A = lw"},
+          {"name": "Parallelogram", "formula": "A = bh", "note": "h is the perpendicular height."},
+          {"name": "Trapezoid", "formula": "A = ½(b₁ + b₂)h", "note": "b₁ and b₂ are the two parallel sides."}
+        ]},
+        {"title": "Composite figures", "items": [
+          {"name": "Area", "formula": "add the areas of the pieces"},
+          {"name": "Perimeter", "formula": "go around the outside once", "note": "Shared edges (dashed) are inside the figure and don't count."}
+        ]}
+      ],
+      "flashcards": [
+        {"front": "Square", "back": "Four equal sides, four right angles. p = 4s, A = s²"},
+        {"front": "Rhombus", "back": "Four equal sides; opposite sides parallel. p = 4s"},
+        {"front": "Rectangle", "back": "Four right angles. p = 2(l + w), A = lw"},
+        {"front": "Parallelogram", "back": "Opposite sides parallel and equal. p = 2(b + side), A = bh"},
+        {"front": "Trapezoid", "back": "Exactly one pair of parallel sides (the bases). A = ½(b₁ + b₂)h"},
+        {"front": "Height of a parallelogram or trapezoid", "back": "The perpendicular distance between the parallel sides. Never a side."},
+        {"front": "Perimeter of a composite figure", "back": "Add the outside edges only. Leave out shared (dashed) edges."},
+        {"front": "Area of a composite figure", "back": "Add the areas of the pieces"}
+      ]
+    },
+    {
+      "id": "2.4",
+      "title": "Circles",
+      "topics": "Parts of a circle · circumference · area · tangents, inscribed angles and arcs · degrees to radians",
+      "formulas": [
+        {"title": "Size", "items": [
+          {"name": "Circumference", "formula": "C = 2πr = πd"},
+          {"name": "Area", "formula": "A = πr² = πd² / 4"},
+          {"name": "From the circumference", "formula": "r = C / (2π)\nA = C² / (4π)"}
+        ]},
+        {"title": "Angles and arcs", "items": [
+          {"name": "Tangent and radius", "formula": "perpendicular", "note": "At the point where the tangent touches."},
+          {"name": "Inscribed in a semicircle", "formula": "90°"},
+          {"name": "Inscribed angle", "formula": "½ × intercepted arc"},
+          {"name": "Tangent–chord angle", "formula": "½ × intercepted arc"},
+          {"name": "Arcs of a full circle", "formula": "add up to 360°"}
+        ]},
+        {"title": "Radians", "items": [
+          {"name": "Degrees to radians", "formula": "rad = degrees × π / 180"},
+          {"name": "Half a turn", "formula": "π rad = 180°"},
+          {"name": "Common angles", "formula": "30° = π/6 · 45° = π/4 · 60° = π/3 · 90° = π/2"}
+        ]}
+      ],
+      "flashcards": [
+        {"front": "Radius", "back": "From the center to the circle"},
+        {"front": "Diameter", "back": "A chord through the center. d = 2r"},
+        {"front": "Chord", "back": "A segment with both ends on the circle"},
+        {"front": "Secant line", "back": "A line that crosses the circle at two points"},
+        {"front": "Tangent line", "back": "A line that touches the circle at exactly one point"},
+        {"front": "Arc", "back": "Part of the circle between two points"},
+        {"front": "Sector", "back": "The region between two radii and their arc (a pizza slice)"},
+        {"front": "Segment (of a circle)", "back": "The region between a chord and its arc"},
+        {"front": "Central angle", "back": "An angle with its vertex at the center"},
+        {"front": "Inscribed angle", "back": "Vertex on the circle, sides are chords. It's half its intercepted arc."},
+        {"front": "Angle inscribed in a semicircle", "back": "90°"},
+        {"front": "Tangent and radius", "back": "Perpendicular where the tangent touches"},
+        {"front": "Circumference", "back": "C = 2πr = πd"},
+        {"front": "Area of a circle", "back": "A = πr²"},
+        {"front": "Degrees to radians", "back": "Multiply by π / 180. π rad = 180°"},
+        {"front": "60° in radians", "back": "π/3 ≈ 1.05 rad"}
+      ]
+    }
+  ]
+}

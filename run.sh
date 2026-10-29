@@ -30,7 +30,7 @@ if [ ! -f .venv/.installed ] || [ requirements.txt -nt .venv/.installed ]; then
 fi
 
 if [ "${1:-}" = "test" ]; then
-  for t in test_app.py test_wheel.py test_worksheet.py test_problems.py; do
+  for t in test_app.py test_wheel.py test_worksheet.py test_problems.py test_study.py; do
     echo "== $t"
     .venv/bin/python "$t"
   done

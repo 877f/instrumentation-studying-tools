@@ -1,0 +1,86 @@
+/* Study guide (static/study.js). Built on app.css: same tokens, faceplates and controls.
+   Figures are drawn in blueprint blue on the faceplate, labels in ink, the unknown in the pointer red. */
+
+:root { --fig-ln: #2b4862; --fig-mark: #4d6a84; }
+@media (prefers-color-scheme: dark) { :root { --fig-ln: #8fb6d8; --fig-mark: #7f9bb4; } }
+
+/* -------------------------------------------------------------- figures */
+
+.sg-fig { margin: 14px auto 6px; }
+.sg-fig svg { display: block; max-width: 100%; height: auto; margin: 0 auto; overflow: visible; color: var(--text); }
+.sg-fig .ln, .sg-fig .thin, .sg-fig .dash { fill: none; stroke: var(--fig-ln); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sg-fig .thin { stroke-width: 1.8; }
+.sg-fig .dash { stroke-width: 1.7; stroke-dasharray: 6 5; stroke-linecap: butt; }
+.sg-fig circle.ln { stroke-width: 2.4; }
+.sg-fig .mark { fill: none; stroke: var(--fig-mark); stroke-width: 1.5; }
+.sg-fig .fill { fill: var(--fig-ln); stroke: none; }
+.sg-fig text { fill: currentColor; dominant-baseline: central; }
+.sg-fig .pt { font: italic 650 17px var(--f-sans); }
+.sg-fig .val { font: 600 15px var(--f-mono); font-variant-ligatures: none; }
+.sg-fig .num { font: 800 15px var(--f-sans); }
+.sg-fig .q { font: 800 15.5px var(--f-mono); fill: var(--pointer); }
+
+/* ------------------------------------------------------------- page bits */
+
+.sg-page { max-width: 800px; margin: 0 auto; }
+.sg-kick { display: flex; align-items: center; gap: 10px; }
+.head-meter.sg-always { display: block; }
+.part-list li a { color: inherit; text-decoration: none; }
+.part-list li a:hover { text-decoration: underline; text-underline-offset: 4px; }
+a.level { color: var(--text); text-decoration: none; }
+.sg-sec .lvl-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sg-inline { padding: 40px 0; }
+.sg-h { margin: 4px 0 12px; }
+
+.sg-pick { margin-bottom: 16px; }
+.sg-pick .label { margin-bottom: 8px; }
+.sg-select {
+  width: 100%; min-width: 0; min-height: 50px; padding: 0 42px 0 16px; border: 0; border-radius: 11px; cursor: pointer;
+  -webkit-appearance: none; appearance: none; color: var(--text); font: 650 16px/1.2 var(--f-sans);
+  background: var(--enclosure-deep) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23afc0ce' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 16px center;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .08);
+}
+.sg-select:focus-visible { outline: 2.5px solid var(--focus); outline-offset: 2px; }
+.sg-select option { color: #17191b; background: #f6f4ec; }
+
+/* ------------------------------------------------------------- a problem */
+
+.sg-q .qtext { margin-top: 10px; }
+.sg-q .qtags { margin-bottom: 18px; }
+.sg-msg { display: block; font: 600 17px/1.45 var(--f-sans); }
+.sg-retry { margin-top: 4px; }
+.sg-retry .link { padding: 6px 0 0; }
+.sg-tbbar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sg-tbbar .sg-select { flex: 1; }
+.sg-tbbar .icon-btn { font-size: 24px; line-height: 1; }
+
+/* quiz results */
+.sg-missed { display: grid; gap: 14px; }
+.sg-miss { padding: 18px 20px 6px; }
+.sg-miss .sg-fig { max-width: 340px; }
+.sg-miss-q { margin: 8px 0 6px; font-weight: 600; font-size: 17px; }
+.sg-miss-a { margin-top: 4px; font-weight: 700; }
+.sg-miss details.solution { margin: 10px -20px 0; box-shadow: none; background: transparent; border-top: 1px solid var(--rule); border-radius: 0; }
+.sg-quizzes { margin-top: 16px; }
+.sg-quizzes .rows li { align-items: center; }
+
+/* progress rows: the kind of problem is a link to practice it */
+.rows .sg-type { padding: 0; text-align: left; font-weight: 600; font-size: 15px; line-height: 1.4; }
+.rows .id .lamp { width: 11px; height: 11px; margin-top: 6px; }
+
+/* ------------------------------------------------------------ flashcards */
+
+.sg-filter { margin-bottom: 16px; }
+.sg-deck { max-width: 640px; margin: 0 auto; }
+.sg-deck-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.sg-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 230px;
+  padding: 26px 22px; border: 0; cursor: pointer; text-align: center; font: inherit; transition: transform .12s ease-out;
+}
+.sg-card:active { transform: scale(.99); }
+.sg-card:focus-visible { outline: 2.5px solid var(--focus); outline-offset: 4px; }
+.sg-card.flipped { background: color-mix(in srgb, var(--faceplate) 88%, var(--go)); }
+.sg-card-text { font: 700 clamp(21px, 2.8vw, 27px)/1.35 var(--f-sans); letter-spacing: -.01em; text-wrap: balance; }
+.sg-card.flipped .sg-card-text { font: 600 clamp(19px, 2.4vw, 23px)/1.45 var(--f-mono); font-variant-ligatures: none; }
+.sg-card-hint { font-size: 13.5px; color: var(--muted); }
+.sg-deck-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }

@@ -18,7 +18,7 @@ import threading
 import time
 import webbrowser
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 
 from chapters import BY_ID as CHAPTERS_BY_ID, CHAPTERS
 from core import grader
@@ -306,6 +306,87 @@ def api_problems_reveal():
 def api_problems_formulas(mid):
     m = problem_module(mid)
     return jsonify(m.formulas) if m else bad("No such module.", 404)
+
+
+# ---------------------------------------------------------- study guide
+# Geometry and any other folder in content/study/ (core/study.py). Stateless too: each problem's
+# givens come back with the answer, and the server works the answer out again from them.
+
+def study_chapter(cid):
+    c = CHAPTERS_BY_ID.get(cid) if isinstance(cid, str) else None
+    return c if getattr(c, "type", None) == "study" else None
+
+
+def study_lookup(body):
+    """-> (chapter, type, params) from a check/reveal request, or None if anything is invalid."""
+    c = study_chapter(body.get("chapter"))
+    t = c.by_type.get(body.get("type")) if c and isinstance(body.get("type"), str) else None
+    params = body.get("params")
+    return (c, t, params) if t is not None and t.valid(params) else None
+
+
+@app.get("/study")
+@app.get("/study/")
+def study_home():
+    return redirect("/#/study")
+
+
+@app.post("/api/study/problem")
+def api_study_problem():
+    body = request.get_json(silent=True) or {}
+    c = study_chapter(body.get("chapter"))
+    if c is None:
+        return bad("No such chapter.")
+    section, type_id, avoid = body.get("section"), body.get("type"), body.get("avoid")
+    if not isinstance(section, str) or not (type_id is None or isinstance(type_id, str)):
+        return bad("No such section.")
+    try:
+        return jsonify({"question": c.problem(section, type_id, random.Random(), avoid)})
+    except ValueError as e:
+        return bad(str(e))
+
+
+@app.post("/api/study/quiz")
+def api_study_quiz():
+    body = request.get_json(silent=True) or {}
+    c = study_chapter(body.get("chapter"))
+    if c is None:
+        return bad("No such chapter.")
+    sections = [s for s in body.get("sections") or [] if s in c.section_ids]
+    count = body.get("count", 10)
+    if not (isinstance(count, int) and not isinstance(count, bool) and 1 <= count <= 40):
+        count = 10
+    try:
+        return jsonify({"chapter": c.id, "questions": c.quiz(sections, count, random.Random())})
+    except ValueError as e:
+        return bad(str(e))
+
+
+@app.post("/api/study/check")
+def api_study_check():
+    body = request.get_json(silent=True) or {}
+    found = study_lookup(body)
+    if found is None:
+        return bad("Bad question data. Go back and start again.")
+    c, t, params = found
+    return jsonify(c.check(t, params, str(body.get("answer", ""))[:200]))
+
+
+@app.post("/api/study/reveal")
+def api_study_reveal():
+    found = study_lookup(request.get_json(silent=True) or {})
+    if found is None:
+        return bad("Bad question data. Go back and start again.")
+    c, t, params = found
+    return jsonify(c.reveal(t, params))
+
+
+@app.get("/api/study/<cid>/textbook/<section>")
+def api_study_textbook(cid, section):
+    """The private textbook set. 404 wherever content/private/ is absent, which includes the hosted site."""
+    c = study_chapter(cid)
+    items = c.textbook_items(section) if c and section in c.section_ids else None
+    return jsonify({"items": items}) if items is not None else bad("No textbook set here.", 404)
 
 
 # ------------------------------------------------------------ local testing

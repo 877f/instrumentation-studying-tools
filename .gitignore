@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .venv/
 scripts/keepalive.log
+# Textbook exercises: local only, never committed or deployed (see README, Study Guide)
+content/private/

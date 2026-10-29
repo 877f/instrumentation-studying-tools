@@ -7,6 +7,7 @@ The home screen lists the study modules. There are three kinds:
 - **Worksheet chapters**, such as Chapter 2 and [Chapter 3: Electrical Calculations](#chapter-3-electrical-calculations): numeric problems from a worksheet, explained below.
 - **Formula drills**, such as the Ohm's Law Wheel: you type formulas from memory. See [Ohm's Law Wheel](#ohms-law-wheel).
 - **Problem sets**, such as [Household kWh](#household-kwh) and [Circuit Diagrams](#circuit-diagrams): levels of problems with several answer boxes, drawn as a table or a circuit.
+- **Study guides**, such as [Geometry, Chapter 2](#study-guide-geometry-chapter-2): formula cards, practice with fresh numbers, quizzes, flashcards and saved progress, by section. Also at `/study/`.
 
 Each worksheet chapter has three tabs:
 
@@ -153,6 +154,52 @@ Defaults I chose:
 - **Clean values:** each diagram starts from a common voltage (1.5 V to 240 V) and resistor value. A pair is used only if the current comes out clean to 3 significant figures and the power to 4. D5 keeps the current between 10 µA and 100 mA and the power at 0.1 mW or more, so no answer is absurdly small. The value lists are at the top of `chapters/circuits.py`.
 - **The formula box** checks the step 1 formula. For D4 diagrams with P labeled, that's the first unknown, such as `I = √(P/R)`.
 
+## Study guide: Geometry, Chapter 2
+
+Technical Math Chapter 2, in four sections: 2.1 Angles and lines, 2.2 Triangles, 2.3 Quadrilaterals, 2.4 Circles. It's on the home screen and at `/study/`. Each section has:
+
+- **Practice:** one problem at a time with Check, Hint, Show steps and Next. Pick one kind of problem or Mixed. A wrong answer says what's off and lets you try again; it counts as a miss in your progress.
+- **Formulas:** the section's formula card.
+- **Cards:** flashcards. Tap, Space or Enter flips; ← and → move.
+- **Textbook:** the book's own exercises, only on a computer that has the private file (see below).
+
+The chapter page adds **Quiz** (pick sections and 5, 10 or 20 problems; no hints; score, missed problems and worked answers at the end; Retry missed) and **Progress** (per kind of problem: attempts, right answers, last seen; mastery % per section). Progress is saved in this browser only, under its own key, separate from the worksheet chapters.
+
+**Every problem is generated.** The site is public, so the textbook's exercises are never in the repo. Each kind of problem is a generator that makes fresh numbers with the same structure, plus a solver that works out the answer, so the answer key is code. Figures are drawn as SVG from each problem's own numbers.
+
+**Typing answers:**
+
+- Numbers: `1,234`, `1234`, `4.43e6`, `4.43x10^6`, `4.43 × 10⁶`. Units are optional, but a typed unit must match: `ft²`, `ft^2`, `ft2` and `sq ft` are all ft², and `ft` for an area is marked wrong with a message. There are no conversions.
+- Right means within **0.5 %**, or the exact value rounded half-up to the significant figures you typed (at least 2): exact 12.8 accepts 13; exact 25.76 accepts 26. When the value sits exactly on a tie, such as 9.25 to 2 figures, both 9.3 and 9.2 count.
+- Angles: `25`, `25°`, `25 deg`. Radians: a decimal or a π form, `pi/8`, `π/8`, `313pi/450`.
+- Naming parts of a figure: `∠ABD` = `∠DBA`, `CB` = `BC`, `ΔOEC` = `ΔCOE`. Case, spaces and the ∠ / Δ signs don't matter. Where several answers are right, any of them counts.
+- Composite-figure formulas (2.3): `p = 4a + 2b`, checked for algebraic equivalence like the Ohm's Law Wheel.
+
+**Answers are shown textbook style:** rounded to the fewest significant figures among the measured givens (exact values and whole-degree angles don't count; trailing zeros in a whole number such as 3200 aren't significant), with the unrounded value beside it. Scientific notation appears only where plain digits would need zeros that aren't significant: 1.73 × 10³ ft, but 340 m.
+
+Choices I made:
+
+- **2.1 #28–30 are pending:** the screenshot cut off after #27. The textbook set shows "Answer coming soon" for them, and they're never in a quiz.
+- **2.3 #21–24 are built.** The figures (Figs. 2.65 and 2.66) were in the screenshots after all. The answers are worked out from the figures, not from the book's key: p = 4a + 2b, p = 4b, A = bh + a², A = a(2b − a). Check them against the book.
+- **2.4 #16, #29 and #30 are shown to 4 figures** (1.239 × 10⁶ ft², 2.185 rad, 5.637 rad), because 1256, 125.2 and 323.0 have 4. The 3-figure answers are accepted too.
+- **2.1 #11, "the sides adjacent to ∠DBC",** is read as the two rays BD and BC.
+
+### The private textbook set
+
+`content/private/ch2-textbook.json` holds the book's exercises, exact numbers and the answer-key values used as test fixtures. **`content/private/` is gitignored**, so it's never committed and never reaches Render. Where the file is absent, the Textbook tab doesn't appear. Copy it between your own computers by hand.
+
+### Add a study chapter
+
+A study chapter is **a folder in `content/study/`**, found at startup. No code changes:
+
+1. Copy `content/study/geometry-ch2/` to a new folder, such as `content/study/geometry-ch3/`.
+2. In `chapter.json`, set `id`, the titles, and the `sections`, each with its `formulas` card and `flashcards`.
+3. In `problems.py`, write a `Type` for each kind of problem: `generate(rng)`, `valid(params)`, `view(params)` (text, hint, figure) and `solve(params)`. Figures use the helpers in `core/figures.py`.
+4. Start the app. It generates problems for every type and checks that each one passes `valid()` and that its own answer grades as right, so a typo stops it with an error.
+5. Optionally, add a private textbook file and name it in `chapter.json` as `"textbook"`.
+
+`py test_study.py` checks every textbook fixture (skipped without the private file), over 100 checker cases, 200 random problems per type, the privacy rules, and the API.
+
 ## Test it on your computer
 
 You don't need access to the hosted site to try a change. Run your own copy:
@@ -289,6 +336,7 @@ py test_worksheet.py           # every worksheet answer to 3 sig figs, with flag
 py test_wheel.py               # Ohm's Law Wheel checker: 12 formulas x spellings x variable sets
 py test_app.py                 # grader and API tests
 py test_problems.py            # Household kWh and Circuit Diagrams: 200 random questions per level
+py test_study.py               # study guide: textbook fixtures, answer checker, 200 problems per type, privacy, API
 ```
 
 `test_problems.py` checks that each kWh row is W × h ÷ 1000, the rows add up to the TOTAL, and the month and cost follow. For circuits it checks that V = I × R and that P = V × I = I² × R = V² ÷ R all agree. It flags any value that's negative, absurdly tiny or huge (the `RANGES` at the top), and prints the smallest and largest value it saw for each.
@@ -310,5 +358,9 @@ If the page loads on the computer but the phone times out, the Wi-Fi probably bl
 | `core/` | Shared engine: units, number formatting, worksheet templates, grading, `formula.py` (formula parser and sympy checker), `problems.py` (problem sets) |
 | `static/` | Front end, no build step: `index.html`, `app.css`, `app.js`, `formula.js` (formula drills), `problems.js` (problem sets: the kWh table, the circuit SVG), `instruments.js` (meters, the formula ring, lamps, the needle animation) |
 | `static/fonts/` | Fonts used by the site, with their licenses in `OFL.txt` |
+| `content/study/` | Study-guide chapters, one folder each: `chapter.json` plus `problems.py` |
+| `content/private/` | Gitignored. The textbook's own exercises for the local-only Textbook set |
+| `core/study.py`, `core/answers.py`, `core/figures.py` | Study-guide engine: chapter loading, answer checking and textbook-style rounding, SVG figures |
+| `static/study.js`, `static/study.css` | Study-guide pages |
 | `run.sh`, `run.bat` | Run the site on your own computer for testing, with live reload |
 | `scripts/keepalive.py` | Pings the site so it stays awake |
