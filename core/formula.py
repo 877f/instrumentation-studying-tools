@@ -520,7 +520,7 @@ class FormulaModule:
             raw_slots += [""] * (len(formulas) - len(raw_slots))
             matched, slots = set(), []
             for raw in raw_slots:
-                raw = str(raw)[:200]
+                raw = str(raw or "")[:200]       # an empty box before a filled one arrives as null
                 if not raw.strip():
                     slots.append({"status": "blank", "message": "Left blank."})
                     continue

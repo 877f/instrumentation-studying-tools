@@ -438,6 +438,7 @@ function insertAtCursor(input, text) {
   const e = input.selectionEnd ?? s;
   input.value = input.value.slice(0, s) + text + input.value.slice(e);
   input.setSelectionRange(s + text.length, s + text.length);
+  input.dispatchEvent(new Event('input', { bubbles: true }));   // setting .value doesn't fire one, and the blank wheel saves on it
   input.focus();
 }
 

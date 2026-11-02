@@ -165,6 +165,13 @@ def blank_wheel():
     if not ok:
         failures.append(f"blank wheel mixed: {got} score {mixed['score']}")
 
+    gap = M.grade_blank({"P": [None, "V*I"]})     # JSON turns a skipped box into null
+    got = [s["status"] for s in gap["quadrants"]["P"]["slots"]]
+    ok = got == ["blank", "correct", "blank"] and gap["score"] == 1
+    print(f"  {'ok  ' if ok else 'FAIL'} empty box before a filled one -> {gap['score']}/12, {got}")
+    if not ok:
+        failures.append(f"blank wheel gap: {got} score {gap['score']}")
+
 
 def main():
     spellings()

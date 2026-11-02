@@ -129,6 +129,7 @@ def api_tests():
     r = c.get("/")
     check(r.status_code == 200 and b"Instrumentation Nation" in r.data, "index page")
     check(c.get("/static/app.js").status_code == 200 and c.get("/static/app.css").status_code == 200, "static files")
+    check("new Event('input'" in c.get("/static/app.js").get_data(as_text=True), "keypad taps must fire an input event")
     r = c.get("/healthz")
     check(r.status_code == 200 and r.data == b"ok", "healthz")
 
