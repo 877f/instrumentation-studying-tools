@@ -238,11 +238,14 @@ def formula_api_tests(c, check):
           "formula session rejects a worksheet chapter")
 
     # Circuit Bench: static pages plus ES modules served as JavaScript
-    for url, needle in [("/tools/circuit", b"Circuit Bench"), ("/tools/circuit/debug", b"solver.js")]:
+    for url, needle in [("/tools/circuit", b"Circuit Bench"), ("/tools/circuit/bench", b"js/app.js"),
+                        ("/tools/circuit/debug", b"solver.js")]:
         r = c.get(url)
         check(r.status_code == 200 and needle in r.data, f"{url} serves its page")
     r = c.get("/static/circuit/js/core/solver.js")
     check(r.status_code == 200 and "javascript" in r.content_type, "circuit modules are served as JavaScript")
+    r = c.get("/static/circuit/meters/fluke-87v.json")
+    check(r.status_code == 200 and r.get_json()["jacks"], "meter profile is served as JSON")
 
 
 def main():

@@ -27,7 +27,7 @@
       <h1 class="wordmark"><span>Circuit</span> <span>Bench</span></h1>
       <p class="lede">Build a circuit, probe it with a virtual multimeter, and find out if you'd blow the fuse before you touch real hardware.</p>
       <div class="actions">
-        <a class="btn primary" href="/tools/circuit/debug">Try the solver</a>
+        <a class="btn primary" href="/tools/circuit/bench">Open the bench</a>
       </div>
     </div>
 
@@ -74,32 +74,32 @@
 
   <div class="panel-head">
     <span class="label">Bench status</span>
-    <span class="label">1 of 5 online</span>
+    <span class="label">3 of 5 online</span>
   </div>
   <section class="face modules" aria-label="What's built so far">
+    <a class="module" href="/tools/circuit/bench">
+      <span class="lamp go"></span>
+      <h2>Schematic editor</h2>
+      <p>Place supplies, resistors and switches, wire them up to match what you built, and set each value.</p>
+      <span class="state">Open</span>
+    </a>
+    <a class="module" href="/tools/circuit/bench">
+      <span class="lamp go"></span>
+      <h2>Multimeter and fuse check</h2>
+      <p>Pick jacks and a dial setting, place the leads, and see the reading, or see the fuse blow.</p>
+      <span class="state">Open</span>
+    </a>
     <a class="module" href="/tools/circuit/debug">
       <span class="lamp go"></span>
       <h2>Circuit solver</h2>
-      <p>Node voltages, branch currents and power for any DC circuit, with plain-English warnings when something's wrong.</p>
-      <span class="state">Open</span>
+      <p>The math underneath: node voltages, branch currents and power, with plain-English warnings.</p>
+      <span class="state">Debug page</span>
     </a>
     <div class="module">
       <span class="lamp amber blink"></span>
-      <h2>Schematic editor</h2>
-      <p>Drop in supplies, resistors and switches, wire them up, and watch the values update as you go.</p>
-      <span class="state">Next up</span>
-    </div>
-    <div class="module">
-      <span class="lamp"></span>
-      <h2>Multimeter and fuse check</h2>
-      <p>Pick jacks and a dial setting, place the leads, and see the reading, or see the fuse blow.</p>
-      <span class="state">Coming</span>
-    </div>
-    <div class="module">
-      <span class="lamp"></span>
       <h2>Where do my leads go?</h2>
       <p>Step-by-step lead placement for any measurement, plus a "show me the mistake" replay.</p>
-      <span class="state">Coming</span>
+      <span class="state">Next up</span>
     </div>
     <div class="module">
       <span class="lamp"></span>

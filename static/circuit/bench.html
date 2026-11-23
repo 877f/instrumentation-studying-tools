@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Circuit Bench</title>
+<meta name="description" content="Draw the circuit you built, set each part's value, probe it with a virtual multimeter, and check the fuse before you touch real hardware.">
+<meta name="theme-color" content="#2b4862" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e151c" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121920'/%3E%3Crect x='3' y='3' width='26' height='19' rx='3' fill='%23f6f4ec'/%3E%3Cpath d='M4 16A17 17 0 0 1 28 16' fill='none' stroke='%2317191b' stroke-width='1.8'/%3E%3Cpath d='M16 28 24 10.8' stroke='%23d42b1e' stroke-width='2.4' stroke-linecap='round'/%3E%3Crect x='3' y='22' width='26' height='7' fill='%23121920'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/sofia-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/circuit/css/editor.css">
+</head>
+<body class="bench-app">
+<div class="app">
+  <header class="topbar">
+    <a class="back" href="/tools/circuit">Circuit Bench</a>
+    <div class="tb-actions">
+      <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+      <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
+      <button class="tbtn" id="overlayBtn" aria-pressed="false" title="Show every node voltage and current">Show values</button>
+      <select class="tbtn" id="examples" aria-label="Load an example">
+        <option value="">Examples…</option>
+        <option value="divider">Voltage divider</option>
+        <option value="series-parallel">Series-parallel</option>
+        <option value="blank">Blank board</option>
+      </select>
+      <button class="tbtn" id="shareBtn" title="Copy a link to this circuit">Share</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <nav class="palette" id="palette" aria-label="Parts and tools"></nav>
+
+    <section class="board-col">
+      <div class="board-wrap" id="boardWrap">
+        <svg class="board" id="board" role="application" aria-label="Circuit board">
+          <defs>
+            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle class="grid-dot" cx="0" cy="0" r="1.1"/></pattern>
+          </defs>
+        </svg>
+        <div class="empty-hint" id="emptyHint" hidden>
+          <b>Draw the circuit you built</b>
+          <span>Pick a part on the left, then click the board to place it. Drag from a pin to wire it up. Or start from an example.</span>
+        </div>
+        <div class="zoom">
+          <button class="tbtn" id="zoomOut" aria-label="Zoom out">−</button>
+          <button class="tbtn" id="fitBtn">Fit</button>
+          <button class="tbtn" id="zoomIn" aria-label="Zoom in">+</button>
+        </div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <p class="status" id="status" aria-live="polite"></p>
+      <section class="card inspector" id="inspector" hidden aria-label="Selected part"></section>
+    </section>
+
+    <aside class="side">
+      <section class="card meter-card" id="meterCard"><div id="meterInner"></div></section>
+      <section class="card" id="issues" hidden></section>
+    </aside>
+  </div>
+</div>
+<div class="probe-ghost" id="probeGhost" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script type="module" src="/static/circuit/js/app.js"></script>
+</body>
+</html>

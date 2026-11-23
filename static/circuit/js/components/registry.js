@@ -15,7 +15,7 @@
      update(ctx)                 → bool  after a solve: change state and ask for a re-solve
      extra(ctx, result)          → {}    extra result fields
      checks(ctx, result)         → issue[]  warnings after the solve
-     groundPin, isGround, presets
+     groundPin, isGround, isJunction, presets
 
    ctx: id, params, state, omega (rad/s, 0 for DC), node(pin) → matrix index (−1 = reference),
         branch(k) → matrix index; after the solve also v(pin) → Complex, x(k) → Complex,
@@ -26,6 +26,7 @@ import vsource from './vsource.js';
 import isource from './isource.js';
 import sw from './switch.js';
 import ground from './ground.js';
+import junction from './junction.js';
 
 export function createRegistry(defs = []) {
   const map = new Map();
@@ -51,4 +52,5 @@ export const registry = createRegistry([
   isource,
   sw,
   ground,
+  junction,
 ]);

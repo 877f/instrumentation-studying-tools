@@ -1,0 +1,67 @@
+{
+  "id": "fluke-87v",
+  "name": "Fluke 87V (generic model)",
+  "note": "Values marked \"verify\": true come from memory of the published spec sheet. Check them against the 87V manual.",
+  "jacks": [
+    { "id": "A", "label": "A", "fuse": "A", "kind": "current" },
+    { "id": "mAuA", "label": "mA µA", "fuse": "mA", "kind": "current" },
+    { "id": "COM", "label": "COM", "kind": "common" },
+    { "id": "VOhm", "label": "V Ω", "kind": "voltage" }
+  ],
+  "fuses": {
+    "mA": { "label": "F 440 mA 1000 V", "rating": 0.44, "continuous": 0.4 },
+    "A": { "label": "F 11 A 1000 V", "rating": 11, "continuous": 10,
+           "shortTerm": { "max": 20, "seconds": 30, "verify": true } }
+  },
+  "inputs": {
+    "VOhm": { "impedance": 10000000 },
+    "mAuA": { "shunt": { "dca": 1.8, "dcua": 100, "default": 1.8 }, "verify": true,
+              "burdenNote": "1.8 mV/mA on mA, 100 µV/µA on µA" },
+    "A": { "shunt": { "default": 0.03 }, "verify": true, "burdenNote": "0.03 V/A" }
+  },
+  "ohms": { "openVoltage": 3.0, "sourceResistance": 1000, "verify": true,
+            "note": "Modeled as a 3 V source behind 1 kΩ. The real meter's test current changes with range." },
+  "leadAlert": { "display": "LEAd", "verify": true,
+                 "note": "The 87V shows LEAd and beeps when a lead is in a current jack and the dial isn't on a current function." },
+  "dial": [
+    { "id": "off", "label": "OFF", "function": "off" },
+    { "id": "acv", "label": "V~", "function": "acv", "unsupported": true },
+    { "id": "dcv", "label": "V⎓", "function": "voltage", "inputs": ["VOhm"], "danger": 1000,
+      "ranges": [
+        { "max": 6, "decimals": 3, "unit": "V", "scale": 1 },
+        { "max": 60, "decimals": 2, "unit": "V", "scale": 1 },
+        { "max": 600, "decimals": 1, "unit": "V", "scale": 1 },
+        { "max": 1000, "decimals": 0, "unit": "V", "scale": 1 }
+      ] },
+    { "id": "mv", "label": "mV⎓", "function": "voltage", "inputs": ["VOhm"], "danger": 1000,
+      "ranges": [ { "max": 0.6, "decimals": 1, "unit": "mV", "scale": 0.001 } ] },
+    { "id": "ohm", "label": "Ω", "function": "resistance", "inputs": ["VOhm"],
+      "ranges": [
+        { "max": 600, "decimals": 1, "unit": "Ω", "scale": 1 },
+        { "max": 6000, "decimals": 3, "unit": "kΩ", "scale": 1000 },
+        { "max": 60000, "decimals": 2, "unit": "kΩ", "scale": 1000 },
+        { "max": 600000, "decimals": 1, "unit": "kΩ", "scale": 1000 },
+        { "max": 6000000, "decimals": 3, "unit": "MΩ", "scale": 1000000 },
+        { "max": 50000000, "decimals": 2, "unit": "MΩ", "scale": 1000000 }
+      ] },
+    { "id": "aca", "label": "A~", "function": "aca", "unsupported": true },
+    { "id": "dca", "label": "mA/A⎓", "function": "current", "inputs": ["mAuA", "A"],
+      "rangesByJack": {
+        "mAuA": [
+          { "max": 0.06, "decimals": 2, "unit": "mA", "scale": 0.001 },
+          { "max": 0.4, "decimals": 1, "unit": "mA", "scale": 0.001 }
+        ],
+        "A": [
+          { "max": 6, "decimals": 3, "unit": "A", "scale": 1 },
+          { "max": 20, "decimals": 2, "unit": "A", "scale": 1 }
+        ]
+      } },
+    { "id": "dcua", "label": "µA⎓", "function": "current", "inputs": ["mAuA"],
+      "rangesByJack": {
+        "mAuA": [
+          { "max": 0.0006, "decimals": 1, "unit": "µA", "scale": 0.000001 },
+          { "max": 0.006, "decimals": 0, "unit": "µA", "scale": 0.000001 }
+        ]
+      } }
+  ]
+}

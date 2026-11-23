@@ -1,0 +1,969 @@
+/* Circuit Bench editor: state, editing, panels, persistence. The model, solver and meter
+   logic live in core/ and meter/; drawing lives in views/. */
+
+import { registry } from './components/registry.js';
+import { createCircuit, addComponent, addWire, deserialize } from './core/netlist.js';
+import { parseEng, formatEng } from './core/units.js';
+import { encodeShare, decodeShare } from './core/share.js';
+import { measure, initialMeter, userIssues, dialOf, jackOf } from './meter/meter-model.js';
+import { meterFace } from './views/meter-face.js';
+import { renderBoard, indexCircuit, findTarget, attachTerm, attachPoint, bounds, short } from './views/schematic.js';
+import { SHAPES, snap, pinDir, nearestOn, resistorBands, E12, E24 } from './views/symbols.js';
+
+const STORE_KEY = 'circuit-bench:v1';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = (id) => document.getElementById(id);
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch { return null; } },
+  set(v) { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+
+const PRESETS = registry.get('vsource').presets;
+const PALETTE = [
+  { key: 'select', label: 'Select', hint: 'Select and move (Esc)' },
+  { key: 'wire', label: 'Wire', hint: 'Draw wires' },
+  { key: 'resistor', label: 'Resistor', type: 'resistor' },
+  { key: 'supply', label: 'DC supply', type: 'vsource', params: PRESETS.bench },
+  { key: 'battery', label: 'Battery', type: 'vsource', params: PRESETS.battery9v, style: 'battery' },
+  { key: 'switch', label: 'Switch', type: 'switch' },
+  { key: 'ground', label: 'Ground', type: 'ground' },
+];
+const POWER = [0.125, 0.25, 0.5, 1, 2, 5, 10];
+
+let profile = null;
+const S = {
+  circuit: createCircuit(),
+  meter: initialMeter(),
+  probes: { red: null, black: null },     // attachments: { kind: 'pin', term } | { kind: 'wire', id, t }
+  sel: null,                               // { kind: 'comp'|'wire', id }
+  tool: 'select',                          // 'select' | 'wire' | palette key of a part
+  ghostRot: 0,
+  ghostAt: null,
+  overlay: false,
+  view: { x: -60, y: -40, scale: 1 },
+  pending: null,                           // wire being drawn: { from: term, to: [x,y], fresh: junction id or null }
+  probeDrag: null,
+  armed: null,
+  highlight: new Set(),
+  blowEvent: null,
+  series: 'E12',
+  undo: [],
+  redo: [],
+  last: null,                              // last measurement, for tooltips and panels
+};
+
+/* ================================================================ model edits */
+
+function snapshot() { return JSON.stringify({ circuit: S.circuit, probes: S.probes }); }
+function pushUndo() {
+  S.undo.push(snapshot());
+  if (S.undo.length > 100) S.undo.shift();
+  S.redo = [];
+}
+function restore(snap) {
+  const d = JSON.parse(snap);
+  S.circuit = d.circuit;
+  S.probes = d.probes;
+  S.pending = null;
+  if (S.sel && !findSel()) S.sel = null;
+}
+function undo() { if (!S.undo.length) return; S.redo.push(snapshot()); restore(S.undo.pop()); afterChange(); }
+function redo() { if (!S.redo.length) return; S.undo.push(snapshot()); restore(S.redo.pop()); afterChange(); }
+
+/** Change the model: snapshot for undo, apply, then re-check, save and redraw. */
+function commit(fn, { history = true } = {}) {
+  if (history) pushUndo();
+  fn(S.circuit);
+  afterChange();
+}
+
+function afterChange() {
+  dropStaleProbes();
+  checkFuse();
+  save();
+  render();
+}
+
+const comp = (id) => S.circuit.components.find((c) => c.id === id);
+const wire = (id) => S.circuit.wires.find((w) => w.id === id);
+function findSel() { return S.sel && (S.sel.kind === 'comp' ? comp(S.sel.id) : wire(S.sel.id)); }
+
+function dropStaleProbes() {
+  for (const k of ['red', 'black']) {
+    const a = S.probes[k];
+    if (!a) continue;
+    const ok = a.kind === 'pin' ? !!comp(a.term.split('.')[0]) : !!wire(a.id);
+    if (!ok) S.probes[k] = null;
+  }
+}
+
+function removeComponent(id) {
+  const c = S.circuit;
+  c.components = c.components.filter((x) => x.id !== id);
+  c.wires = c.wires.filter((w) => !w.a.startsWith(`${id}.`) && !w.b.startsWith(`${id}.`));
+  pruneJunctions();
+}
+function removeWire(id) {
+  S.circuit.wires = S.circuit.wires.filter((w) => w.id !== id);
+  pruneJunctions();
+}
+/** Junctions with nothing attached are clutter; a junction joining exactly two wires in a line is kept (it's a corner). */
+function pruneJunctions(keep = null) {
+  const c = S.circuit;
+  const used = new Set(c.wires.flatMap((w) => [w.a, w.b]));
+  c.components = c.components.filter((x) => x.type !== 'junction' || x.id === keep || used.has(`${x.id}.j`));
+}
+
+function placePart(key, at) {
+  const p = PALETTE.find((x) => x.key === key);
+  commit((c) => {
+    const id = addComponent(c, registry, p.type, p.params ? { ...p.params } : {},
+      { layout: { x: snap(at[0]), y: snap(at[1]), rot: S.ghostRot }, ...(p.style ? { style: p.style } : {}) });
+    S.sel = { kind: 'comp', id };
+  });
+}
+
+/** Wire end at a board point: an existing pin, a new junction teed into a wire, or a new corner junction. */
+function endAt(c, p, hitTerm) {
+  if (hitTerm) return { term: hitTerm, kind: 'pin' };
+  const ix = indexCircuit(c);
+  const t = findTarget(ix, c, p, { pinRadius: 10, wireRadius: 8 });
+  if (t && t.kind === 'pin') return { term: t.term, kind: 'pin' };
+  if (t && t.kind === 'wire') {
+    const w = c.wires.find((x) => x.id === t.id);
+    if (!w.cut) {
+      const pts = ix.route(w);
+      let q = [snap(t.point[0]), snap(t.point[1])];
+      if (nearestOn(pts, q).dist > 0.5) q = t.point;
+      const j = addComponent(c, registry, 'junction', {}, { layout: { x: q[0], y: q[1], rot: 0 } });
+      const oldB = w.b;
+      w.b = `${j}.j`;
+      addWire(c, `${j}.j`, oldB, { layout: { ...(w.layout || {}) } });
+      return { term: `${j}.j`, kind: 'split' };
+    }
+  }
+  const q = [snap(p[0]), snap(p[1])];
+  const there = findTarget(indexCircuit(c), c, q, { pinRadius: 1, wireRadius: -1 });
+  if (there) return { term: there.term, kind: 'pin' };
+  const j = addComponent(c, registry, 'junction', {}, { layout: { x: q[0], y: q[1], rot: 0 } });
+  return { term: `${j}.j`, kind: 'free' };
+}
+
+function bendFor(c, fromTerm, toPoint) {
+  const [id, pin] = fromTerm.split('.');
+  const part = c.components.find((x) => x.id === id);
+  const d = part && pinDir(part, pin);
+  if (d) return d === 'h' ? 'hv' : 'vh';
+  const from = indexCircuit(c).termPos(fromTerm);
+  if (!from || !toPoint) return 'hv';
+  return Math.abs(toPoint[0] - from[0]) >= Math.abs(toPoint[1] - from[1]) ? 'hv' : 'vh';
+}
+
+/** Finish the wire being drawn at point p. Returns true if drawing continues from a new corner. */
+function finishWire(p, hitTerm, { chain }) {
+  const from = S.pending.from;
+  let cont = null;
+  commit((c) => {
+    const end = endAt(c, p, hitTerm);
+    if (end.term === from) { cont = from; return; }
+    const to = indexCircuit(c).termPos(end.term);
+    addWire(c, from, end.term, { layout: { bend: bendFor(c, from, to) } });
+    if (end.kind === 'free' && chain) cont = end.term;
+  });
+  S.pending = cont ? { from: cont, to: p, fresh: null } : null;
+  render();
+}
+
+function startWire(p, hitTerm) {
+  let from = hitTerm, fresh = null;
+  if (!from) {
+    commit((c) => {
+      const end = endAt(c, p, null);
+      from = end.term;
+      if (end.kind === 'free') fresh = from.split('.')[0];
+    });
+  }
+  S.pending = { from, to: p, fresh };
+  render();
+}
+
+function cancelWire() {
+  if (!S.pending) return;
+  const fresh = S.pending.fresh;
+  S.pending = null;
+  if (fresh && !S.circuit.wires.some((w) => w.a === `${fresh}.j` || w.b === `${fresh}.j`)) {
+    S.circuit.components = S.circuit.components.filter((x) => x.id !== fresh);
+    S.undo.pop();
+  }
+  render();
+}
+
+/* ================================================================ measuring */
+
+function probeTerm(which) {
+  if (S.probeDrag && S.probeDrag.which === which) return S.probeDrag.target ? attachTerm(S.circuit, toAtt(S.probeDrag.target)) : null;
+  return attachTerm(S.circuit, S.probes[which]);
+}
+const toAtt = (t) => (t.kind === 'pin' ? { kind: 'pin', term: t.term } : { kind: 'wire', id: t.id, t: t.t });
+
+function measureNow() {
+  const meter = { ...S.meter, probes: { red: probeTerm('red'), black: probeTerm('black') } };
+  return measure(S.circuit, profile, meter);
+}
+
+function checkFuse() {
+  const m = measureNow();
+  if (m.blows) {
+    S.meter.fuses[m.blows] = 'blown';
+    S.blowEvent = { fuse: m.blows, verdict: m.fuse, fault: m.fault };
+    flash();
+  }
+}
+
+function flash() {
+  const card = $('meterCard');
+  card.classList.remove('blowing');
+  void card.offsetWidth;
+  card.classList.add('blowing');
+}
+
+/* ================================================================ persistence */
+
+let saveTimer = 0;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => store.set({ circuit: S.circuit, probes: S.probes, meter: S.meter, overlay: S.overlay }), 250);
+}
+
+function loadState(d) {
+  if (!d || !d.circuit) return false;
+  const r = deserialize(d.circuit);
+  if (r.error) return false;
+  S.circuit = r.circuit;
+  for (const c of S.circuit.components) c.layout = { x: 0, y: 0, rot: 0, ...(c.layout || {}) };
+  S.probes = d.probes || { red: null, black: null };
+  if (d.meter) S.meter = { ...initialMeter(), ...d.meter, probes: { red: null, black: null } };
+  if (typeof d.overlay === 'boolean') S.overlay = d.overlay;
+  dropStaleProbes();
+  return true;
+}
+
+async function share() {
+  const code = await encodeShare({ circuit: S.circuit, probes: S.probes, meter: { dial: S.meter.dial, red: S.meter.red } });
+  const url = `${location.origin}${location.pathname}#c=${code}`;
+  try { await navigator.clipboard.writeText(url); toast('Link copied. Anyone with it sees this circuit.'); }
+  catch { window.prompt('Copy this link:', url); }
+}
+
+/* ================================================================ examples */
+
+function example(name) {
+  const c = createCircuit();
+  const add = (type, x, y, rot, params = {}, extra = {}) => addComponent(c, registry, type, params, { layout: { x, y, rot }, ...extra });
+  const w = (a, b, bend = 'hv') => addWire(c, a, b, { layout: { bend } });
+  if (name === 'divider') {
+    add('vsource', 100, 200, 0, { ...PRESETS.bench });
+    add('resistor', 200, 120, 0, { R: 1000, Pmax: 0.25 });
+    add('resistor', 300, 200, 1, { R: 2000, Pmax: 0.25 });
+    add('ground', 100, 300, 0);
+    w('V1.p', 'R1.a', 'vh'); w('R1.b', 'R2.a', 'hv'); w('R2.b', 'V1.n'); w('GND1.g', 'V1.n');
+  } else if (name === 'series-parallel') {
+    add('vsource', 100, 220, 0, { ...PRESETS.bench, V: 24 });
+    add('resistor', 180, 120, 0, { R: 100, Pmax: 1 });
+    add('resistor', 300, 220, 1, { R: 300, Pmax: 1 });
+    add('resistor', 380, 120, 0, { R: 200, Pmax: 0.25 });
+    add('resistor', 480, 220, 1, { R: 400, Pmax: 0.25 });
+    add('junction', 300, 120, 0);
+    add('ground', 100, 320, 0);
+    w('V1.p', 'R1.a', 'vh'); w('R1.b', 'J1.j'); w('J1.j', 'R3.a'); w('J1.j', 'R2.a');
+    w('R3.b', 'R4.a', 'hv'); w('R4.b', 'R2.b'); w('R2.b', 'V1.n'); w('GND1.g', 'V1.n');
+  }
+  return c;
+}
+
+/* ================================================================ view: board */
+
+const svg = () => $('board');
+function toWorld(e) {
+  const el = svg();
+  const m = el.getScreenCTM();
+  if (!m) return [0, 0];
+  const pt = el.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  const q = pt.matrixTransform(m.inverse());
+  return [q.x, q.y];
+}
+function setViewBox() {
+  const el = svg();
+  const w = el.clientWidth || 800, h = el.clientHeight || 600;
+  el.setAttribute('viewBox', `${S.view.x} ${S.view.y} ${w / S.view.scale} ${h / S.view.scale}`);
+}
+function fit() {
+  const b = bounds(S.circuit);
+  const el = svg();
+  const w = el.clientWidth || 800, h = el.clientHeight || 600;
+  if (!b) { S.view = { x: -40, y: -40, scale: 1 }; setViewBox(); return; }
+  // On wide screens keep the left edge clear for the floating part editor.
+  const reserve = window.innerWidth > 960 && w > 700 ? 320 : 0;
+  const scale = Math.max(0.4, Math.min((w - reserve) / (b.x1 - b.x0), h / (b.y1 - b.y0), 1.6));
+  S.view = { scale, x: (b.x0 + b.x1) / 2 - (reserve + (w - reserve) / 2) / scale, y: (b.y0 + b.y1) / 2 - h / scale / 2 };
+  setViewBox();
+}
+function zoomAt(factor, clientX, clientY) {
+  const r = svg().getBoundingClientRect();
+  const cx = clientX ?? r.left + r.width / 2, cy = clientY ?? r.top + r.height / 2;
+  const scale = Math.max(0.3, Math.min(3, S.view.scale * factor));
+  const wx = S.view.x + (cx - r.left) / S.view.scale, wy = S.view.y + (cy - r.top) / S.view.scale;
+  S.view = { scale, x: wx - (cx - r.left) / scale, y: wy - (cy - r.top) / scale };
+  setViewBox();
+}
+
+function boardState(m) {
+  const ix = indexCircuit(S.circuit);
+  const probes = {};
+  for (const which of ['red', 'black']) {
+    const d = S.probeDrag && S.probeDrag.which === which ? S.probeDrag : null;
+    if (d) {
+      if (d.overBoard) probes[which] = { point: d.target ? d.target.point : d.world, dragging: true, loose: !d.target };
+    } else {
+      const pt = attachPoint(ix, S.circuit, S.probes[which]);
+      if (pt) probes[which] = { point: pt, armed: S.armed === which };
+    }
+  }
+  let ghost = null;
+  const pal = PALETTE.find((x) => x.key === S.tool && x.type);
+  if (pal && S.ghostAt) {
+    ghost = { id: '', type: pal.type, params: { ...registry.get(pal.type).defaults, ...(pal.params || {}) }, style: pal.style,
+      layout: { x: snap(S.ghostAt[0]), y: snap(S.ghostAt[1]), rot: S.ghostRot } };
+  }
+  let pending = null;
+  if (S.pending) {
+    const from = ix.termPos(S.pending.from);
+    if (from) pending = { from, to: [snap(S.pending.to[0]), snap(S.pending.to[1])], bend: bendFor(S.circuit, S.pending.from, S.pending.to) };
+  }
+  return {
+    circuit: S.circuit, sel: S.sel, highlight: S.highlight, result: m.result, overlay: S.overlay,
+    probes, ghost, pending, target: S.probeDrag && S.probeDrag.target ? S.probeDrag.target.point : null,
+  };
+}
+
+/* ================================================================ view: panels */
+
+function render() {
+  if (!profile) return;
+  const m = measureNow();
+  S.last = m;
+  setViewBox();
+  svg().innerHTML = `<rect class="board-bg" x="-5000" y="-5000" width="10000" height="10000" fill="url(#grid)"/>${renderBoard(boardState(m))}`;
+  $('emptyHint').hidden = S.circuit.components.length > 0;
+  renderToolbar();
+  renderPalette();
+  renderInspector(m);
+  renderMeter(m);
+  renderIssues(m);
+  renderStatus();
+  const ghostEl = $('probeGhost');
+  const d = S.probeDrag;
+  ghostEl.hidden = !(d && d.moved && !d.overBoard);
+  if (!ghostEl.hidden) {
+    ghostEl.className = `probe-ghost ${d.which}`;
+    ghostEl.style.transform = `translate(${d.client[0]}px, ${d.client[1]}px)`;
+  }
+}
+
+function renderToolbar() {
+  $('undoBtn').disabled = !S.undo.length;
+  $('redoBtn').disabled = !S.redo.length;
+  $('overlayBtn').setAttribute('aria-pressed', String(S.overlay));
+}
+
+function paletteIcon(p) {
+  if (p.key === 'select') return '<svg viewBox="0 0 24 24"><path d="M6 3l12 9-5.5 1.2L15.5 20l-2.6 1.2-3-6.6L6 18z"/></svg>';
+  if (p.key === 'wire') return '<svg viewBox="0 0 24 24"><circle cx="4" cy="18" r="2.4"/><circle cx="20" cy="6" r="2.4"/><path class="ln" d="M4 18H13V6H20"/></svg>';
+  const c = { type: p.type, params: { closed: false, ...(p.params || {}) }, style: p.style };
+  return `<svg viewBox="-46 -46 92 92" class="sym">${SHAPES[p.type].draw(c)}</svg>`;
+}
+function renderPalette() {
+  $('palette').innerHTML = PALETTE.map((p) => `<button class="tool ${S.tool === p.key ? 'on' : ''}" data-tool="${p.key}"
+    aria-pressed="${S.tool === p.key}" title="${esc(p.hint || `Place a ${p.label.toLowerCase()}`)}">${paletteIcon(p)}<span>${esc(p.label)}</span></button>`).join('');
+}
+
+function renderStatus() {
+  const pal = PALETTE.find((x) => x.key === S.tool && x.type);
+  let text;
+  if (S.armed) text = `Tap a pin or wire for the ${S.armed} probe.`;
+  else if (pal) text = `Click the board to place a ${pal.label.toLowerCase()}. R rotates. Esc cancels.`;
+  else if (S.pending) text = 'Click a pin or a wire to connect. Click empty board for a corner. Esc to stop.';
+  else if (S.tool === 'wire') text = 'Click a pin, a wire, or the board to start a wire.';
+  else if (S.sel) text = 'Drag to move. R rotates, Delete removes. Drag from a pin to wire it.';
+  else text = 'Click a part to set its value. Drag from any pin to draw a wire. Drag the board to pan; scroll to zoom.';
+  $('status').textContent = text;
+}
+
+/* ---------------------------------------------------------- inspector */
+
+function field(label, param, value, opts = {}) {
+  return `<label class="field"><span>${esc(label)}</span>
+    <input class="num" data-param="${param}" data-unit="${opts.unit || ''}" value="${esc(value)}" placeholder="${esc(opts.placeholder || '')}"
+      autocomplete="off" spellcheck="false" inputmode="text">${opts.help ? `<small>${esc(opts.help)}</small>` : ''}</label>`;
+}
+
+function liveRows(rows) {
+  return `<dl class="live">${rows.map(([k, v, cls]) => `<div class="${cls || ''}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+}
+
+function renderInspector(m) {
+  const el = $('inspector');
+  const item = findSel();
+  const r = m.result;
+  el.hidden = !item;
+  if (!item) { el.innerHTML = ''; return; }
+  const close = '<button class="close" data-act="deselect" aria-label="Close">×</button>';
+  if (S.sel.kind === 'wire') {
+    const wr = r.ok ? r.wires[item.id] : null;
+    el.innerHTML = `<div class="card-head"><span class="label">Selected</span>${close}<h2>${esc(item.id)} · Wire</h2></div>
+      ${wr && !wr.cut ? liveRows([['Node', esc(wr.node)], ['Voltage', esc(short(r.nodes.find((n) => n.name === wr.node)?.v ?? 0, 'V'))],
+        ['Current', esc(short(Math.abs(wr.i), 'A'))]]) : ''}
+      ${item.cut ? '<p class="help">This wire is cut. Put the probes on the two ends to measure the current that would flow through it.</p>'
+        : '<p class="help">To measure current, cut this wire and put the meter in the gap.</p>'}
+      <div class="row-btns">
+        <button class="btn ${item.cut ? '' : 'primary'}" data-act="cut">${item.cut ? 'Reconnect wire' : 'Cut wire'}</button>
+        <button class="btn" data-act="flip" title="Flip the bend (R)">Flip bend</button>
+        <button class="link danger" data-act="delete">Delete</button>
+      </div>`;
+    return;
+  }
+  const c = item, p = c.params, cr = r.ok ? r.components[c.id] : null;
+  let body = '';
+  if (c.type === 'resistor') {
+    const series = S.series === 'E24' ? E24 : E12;
+    const opts = [];
+    for (let dec = 1; dec <= 1e5; dec *= 10) {
+      opts.push(`<optgroup label="${esc(short(dec, 'Ω'))} – ${esc(short(dec * 9.9, 'Ω'))}">${series.map((s) => {
+        const v = Math.round(s * dec * 100) / 100;
+        return `<option value="${v}" ${Math.abs(v - p.R) < 1e-9 * v ? 'selected' : ''}>${esc(short(v, 'Ω'))}</option>`;
+      }).join('')}</optgroup>`);
+    }
+    opts.push(`<option value="1000000" ${p.R === 1e6 ? 'selected' : ''}>1 MΩ</option>`);
+    const bands = resistorBands(p.R);
+    const pct = cr ? (cr.p / p.Pmax) * 100 : 0;
+    body = `${field('Resistance', 'R', short(p.R, 'Ω'), { unit: 'Ω', help: 'Type 4.7k, 4k7, 220, 1M…' })}
+      <div class="field"><span>Standard values</span>
+        <div class="pick"><div class="seg" role="group" aria-label="Value series">${['E12', 'E24'].map((x) => `<button class="${S.series === x ? 'on' : ''}"
+          data-series="${x}" aria-pressed="${S.series === x}">${x}</button>`).join('')}</div>
+        <select data-pick="R" aria-label="Standard resistor values"><option value="">Pick…</option>${opts.join('')}</select></div></div>
+      <label class="field"><span>Power rating</span><select data-param-select="Pmax">${POWER.map((w) => `<option value="${w}" ${w === p.Pmax ? 'selected' : ''}>${
+        w < 1 ? `${{ 0.125: '⅛', 0.25: '¼', 0.5: '½' }[w]} W` : `${w} W`}</option>`).join('')}</select></label>
+      ${bands ? `<div class="bands" title="${esc(bands.names.join(', '))}"><svg viewBox="0 0 120 26" aria-hidden="true"><path class="lead" d="M0 13H120"/>
+        <rect class="body" x="22" y="3" width="76" height="20" rx="9"/>${bands.colors.map((col, i, a) => `<rect x="${
+        i === a.length - 1 ? 84 : 32 + i * 10}" y="3" width="5" height="20" fill="${col}"/>`).join('')}</svg>
+        <span>${esc(bands.names.join(' · '))}</span></div>` : ''}
+      ${cr ? liveRows([['Voltage across', esc(short(Math.abs(cr.v), 'V'))], ['Current through', esc(short(Math.abs(cr.i), 'A'))],
+        ['Power', `${esc(short(cr.p, 'W'))} <small>(${pct < 1 ? '<1' : Math.round(pct)}% of rating)</small>`, pct > 100 ? 'bad' : pct > 50 ? 'warm' : '']]) : ''}`;
+  } else if (c.type === 'vsource') {
+    const battery = c.style === 'battery';
+    const ex = cr && cr.extra;
+    body = `<div class="field"><span>Preset</span><div class="seg wide">${[['bench', 'Bench supply'], ['battery9v', '9 V battery'], ['batteryAA', 'AA cell']]
+      .map(([k, l]) => `<button data-preset="${k}">${l}</button>`).join('')}</div></div>
+      ${field('Voltage', 'V', short(p.V, 'V'), { unit: 'V' })}
+      ${battery ? '' : field('Current limit', 'ilimit', p.ilimit > 0 ? short(p.ilimit, 'A') : '', { unit: 'A', placeholder: 'none',
+        help: 'Leave empty for no limit. A bench supply drops into CC mode at this current.' })}
+      ${field('Internal resistance', 'r', short(p.r, 'Ω'), { unit: 'Ω', help: battery ? 'A 9 V alkaline is around 1–2 Ω; a car battery is about 0.01 Ω.' : '' })}
+      ${ex ? liveRows([['Mode', `<span class="lamp ${ex.mode === 'CC' ? 'amber' : 'go'}"></span> ${ex.mode === 'CC' ? 'CC (current limit)' : 'CV'}`],
+        ['Output', esc(short(ex.terminalVoltage, 'V'))], ['Current', esc(short(ex.supplyCurrent, 'A'))], ['Power out', esc(short(ex.delivered, 'W'))]]) : ''}`;
+  } else if (c.type === 'switch') {
+    body = `<div class="row-btns"><button class="btn primary" data-act="toggle">${p.closed ? 'Open the switch' : 'Close the switch'}</button></div>
+      <p class="help">It's ${p.closed ? 'closed (conducting)' : 'open (no connection)'}. Double-click it on the board to flip it.</p>
+      ${cr && p.closed ? liveRows([['Current through', esc(short(Math.abs(cr.i), 'A'))]]) : ''}`;
+  } else if (c.type === 'ground') {
+    body = '<p class="help">Ground is 0 V. Every voltage is measured from here.</p>';
+  } else if (c.type === 'junction') {
+    body = `<p class="help">A connection point. Drag it to move; wires follow.</p>${cr ? '' : ''}`;
+  }
+  const label = { resistor: 'Resistor', vsource: c.style === 'battery' ? 'Battery' : 'DC supply', isource: 'Current source',
+    switch: 'Switch', ground: 'Ground', junction: 'Junction' }[c.type];
+  el.innerHTML = `<div class="card-head"><span class="label">Selected</span>${close}<h2>${esc(c.id)} · ${esc(label)}</h2></div>
+    ${body}
+    <div class="row-btns">${c.type === 'junction' ? '' : '<button class="btn" data-act="rotate">Rotate (R)</button>'}
+      <button class="link danger" data-act="delete">Delete</button></div>`;
+}
+
+/* -------------------------------------------------------------- meter */
+
+function attLabel(att) {
+  if (!att) return null;
+  const term = attachTerm(S.circuit, att);
+  const node = S.last && S.last.base.ok ? S.last.base.nodeName(term) : null;
+  if (att.kind === 'pin') {
+    const [id, pin] = att.term.split('.');
+    const c = comp(id);
+    const pinName = c && (c.type === 'vsource' || c.type === 'isource') ? (pin === 'p' ? '+' : '−')
+      : c && c.type === 'junction' ? '' : c && c.type === 'ground' ? '' : ` pin ${pin}`;
+    return `${id}${pinName ? ` ${pinName}` : ''}${node ? ` · ${node}` : ''}`;
+  }
+  const w = wire(att.id);
+  return `${att.id}${w && w.cut ? ` (cut, ${att.t > 0.5 ? 'right' : 'left'} end)` : ''}${node ? ` · ${node}` : ''}`;
+}
+
+function renderMeter(m) {
+  const tone = m.fuse ? m.fuse.tone : m.warnings.some((x) => x.level === 'danger') ? 'stop' : null;
+  const dragging = S.probeDrag && S.probeDrag.moved;
+  const chips = ['red', 'black'].map((which) => {
+    const placed = S.probes[which];
+    const status = S.armed === which ? 'Tap the circuit to place it'
+      : placed ? `on ${esc(attLabel(placed))}` : 'Drag onto the circuit';
+    return `<button class="probe-chip ${which} ${placed ? 'placed' : ''} ${S.armed === which ? 'armed' : ''}" data-probe-chip="${which}">
+      <span class="tipdot"></span><b>${which === 'red' ? 'Red' : 'Black'} probe</b><small>${status}</small></button>`;
+  }).join('');
+
+  let verdict = '';
+  const blown = Object.entries(S.meter.fuses).filter(([, v]) => v === 'blown').map(([k]) => k);
+  if (S.blowEvent) {
+    const v = S.blowEvent.verdict;
+    verdict = `<div class="verdict stop big"><span class="lamp stop strike"></span><div><b>FUSE BLOWN</b>
+      <p>${esc(v.message)}</p></div></div>`;
+  } else if (m.fuse) {
+    const pre = dragging && m.fuse.tier === 'blows' ? 'Drop here and the fuse blows. ' : '';
+    verdict = `<div class="verdict ${m.fuse.tone}"><span class="lamp ${m.fuse.tone}"></span><div><b>${esc(m.fuse.label)}</b>
+      <p>${esc(pre + m.fuse.message)}</p></div></div>`;
+  } else if (!m.placed) {
+    verdict = `<p class="help">${S.probes.red || S.probes.black ? 'Place the other probe to measure.'
+      : 'Drag the red and black probes onto the circuit, or tap a probe and then tap the circuit.'}</p>`;
+  }
+
+  const warnings = m.warnings.filter((x) => x.code !== 'fuse-blown' || !S.blowEvent).map((x) => `<div class="mwarn ${x.level}">
+    <span class="lamp ${x.level === 'danger' ? 'stop' : x.level === 'warning' ? 'amber' : 'go'}"></span>
+    <div><b>${esc(x.title)}</b><p>${esc(x.message)}</p></div></div>`).join('');
+
+  $('meterInner').innerHTML = `<div class="card-head"><span class="label">Multimeter</span>
+      <span class="model">${esc(profile.name)}</span></div>
+    <div class="dmm-wrap">${meterFace({ profile, meter: S.meter, display: m.display, tone, blownNow: !!S.blowEvent })}</div>
+    <p class="help center small">Click the dial to change setting. Click a jack to move the red lead.</p>
+    <div class="probe-row">${chips}</div>
+    ${verdict}
+    ${warnings}
+    <div class="row-btns">
+      ${blown.length ? `<button class="btn primary" data-act="replace-fuse">Replace ${blown.map((f) => profile.fuses[f].label.split(' 1000')[0]).join(' and ')} fuse</button>` : ''}
+      ${S.probes.red || S.probes.black ? '<button class="link" data-act="park">Remove probes</button>' : ''}
+    </div>`;
+}
+
+/* -------------------------------------------------------------- issues */
+
+function renderIssues(m) {
+  const res = m.result;
+  const list = userIssues(res).filter((i) => i.code !== 'empty');
+  const el = $('issues');
+  if (!S.circuit.components.length) { el.innerHTML = ''; el.hidden = true; return; }
+  el.hidden = false;
+  const lvl = (l) => (l === 'error' ? 'stop' : l === 'warning' ? 'amber' : 'go');
+  el.innerHTML = `<div class="card-head"><span class="label">Circuit check</span></div>
+    ${list.length ? list.map((i) => `<button class="issue ${i.level}" data-ids="${esc((i.ids || []).join(','))}">
+      <span class="lamp ${lvl(i.level)}"></span><span>${esc(i.message)}</span></button>`).join('')
+    : '<p class="ok"><span class="lamp go"></span> No problems found.</p>'}`;
+}
+
+/* -------------------------------------------------------------- tooltip */
+
+function showTip(e) {
+  const tip = $('tip');
+  const hit = e.target.closest && e.target.closest('[data-hit]');
+  const m = S.last;
+  if (!hit || !m || !m.result.ok || S.probeDrag || S.pending) { tip.hidden = true; return; }
+  const r = m.result;
+  let html = '';
+  if (hit.dataset.hit === 'comp') {
+    const c = comp(hit.dataset.id), cr = r.components[hit.dataset.id];
+    if (!c || !cr || c.type === 'ground') { tip.hidden = true; return; }
+    html = `<b>${esc(c.id)}</b> ${esc(cr.type === 'resistor' ? short(c.params.R, 'Ω') : '')}<br>
+      ${esc(short(Math.abs(cr.v), 'V'))} across · ${esc(short(Math.abs(cr.i), 'A'))}${cr.type === 'resistor' ? ` · ${esc(short(cr.p, 'W'))}` : ''}`;
+  } else if (hit.dataset.hit === 'wire') {
+    const wr = r.wires[hit.dataset.id];
+    if (!wr) { tip.hidden = true; return; }
+    if (wr.cut) html = `<b>${esc(wr.id)}</b> cut · ${esc(wr.ends.join(' | '))}`;
+    else {
+      const n = r.nodes.find((x) => x.name === wr.node);
+      html = `<b>${esc(wr.node)}</b> ${n && !n.floating ? esc(short(n.v, 'V')) : 'floating'}<br>${esc(short(Math.abs(wr.i), 'A'))} in ${esc(wr.id)}`;
+    }
+  } else if (hit.dataset.hit === 'pin') {
+    const name = r.nodeName(hit.dataset.term);
+    const n = r.nodes.find((x) => x.name === name);
+    if (!n) { tip.hidden = true; return; }
+    html = `<b>${esc(name)}</b> ${n.floating ? 'floating' : esc(short(n.v, 'V'))}`;
+  } else { tip.hidden = true; return; }
+  const box = $('boardWrap').getBoundingClientRect();
+  tip.innerHTML = html;
+  tip.hidden = false;
+  tip.style.transform = `translate(${Math.min(e.clientX - box.left + 14, box.width - 190)}px, ${e.clientY - box.top + 16}px)`;
+}
+
+/* ================================================================ input */
+
+function track(handlers) {
+  const move = (e) => handlers.move && handlers.move(e);
+  const up = (e) => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    handlers.up && handlers.up(e);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+
+const hitUnder = (e) => {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const h = el && el.closest('[data-hit]');
+  return h && svg().contains(h) ? h.dataset : {};
+};
+
+function onBoardDown(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  $('tip').hidden = true;
+  const p = toWorld(e);
+  const hitEl = e.target.closest('[data-hit]');
+  const hit = hitEl ? hitEl.dataset : {};
+  const start = [e.clientX, e.clientY];
+  const movedFar = (ev) => Math.hypot(ev.clientX - start[0], ev.clientY - start[1]) > 5;
+
+  if (S.armed) {
+    const t = findTarget(indexCircuit(S.circuit), S.circuit, p, { pinRadius: 22 / S.view.scale, wireRadius: 16 / S.view.scale });
+    const which = S.armed;
+    S.armed = null;
+    if (t) commit(() => { S.probes[which] = toAtt(t); });
+    else render();
+    return;
+  }
+  const pal = PALETTE.find((x) => x.key === S.tool && x.type);
+  if (pal) { placePart(pal.key, p); S.tool = 'select'; S.ghostAt = null; render(); return; }
+
+  if (hit.hit === 'probe') { startProbeDrag(hit.probe, e); return; }
+
+  if (S.pending) {
+    finishWire(p, hit.hit === 'pin' ? hit.term : null, { chain: true });
+    return;
+  }
+
+  if (hit.hit === 'pin' && hit.junction && S.tool !== 'wire') {
+    // a junction: drag to move it, click to start a wire from it
+    const j = comp(hit.junction);
+    const orig = { ...j.layout };
+    let moved = false;
+    track({
+      move(ev) {
+        if (!moved && !movedFar(ev)) return;
+        if (!moved) { moved = true; pushUndo(); }
+        const q = toWorld(ev);
+        j.layout.x = snap(orig.x + q[0] - p[0]);
+        j.layout.y = snap(orig.y + q[1] - p[1]);
+        render();
+      },
+      up() { if (moved) afterChange(); else startWire(p, hit.term); },
+    });
+    return;
+  }
+
+  if (hit.hit === 'pin' || S.tool === 'wire') {
+    startWire(p, hit.hit === 'pin' ? hit.term : null);
+    track({
+      move(ev) { if (S.pending) { S.pending.to = toWorld(ev); render(); } },
+      up(ev) {
+        if (!S.pending || !movedFar(ev)) return;          // a click: keep drawing until the next click
+        const h = hitUnder(ev);
+        finishWire(toWorld(ev), h.hit === 'pin' ? h.term : null, { chain: false });
+      },
+    });
+    return;
+  }
+
+  if (hit.hit === 'comp') {
+    S.sel = { kind: 'comp', id: hit.id };
+    S.highlight = new Set();
+    const c = comp(hit.id);
+    const orig = { ...c.layout };
+    let moved = false;
+    render();
+    track({
+      move(ev) {
+        if (!moved && !movedFar(ev)) return;
+        if (!moved) { moved = true; pushUndo(); }
+        const q = toWorld(ev);
+        c.layout.x = snap(orig.x + q[0] - p[0]);
+        c.layout.y = snap(orig.y + q[1] - p[1]);
+        render();
+      },
+      up() { if (moved) afterChange(); },
+    });
+    return;
+  }
+  if (hit.hit === 'wire') {
+    S.sel = { kind: 'wire', id: hit.id };
+    S.highlight = new Set();
+    render();
+    return;
+  }
+
+  // empty board: deselect and pan
+  S.sel = null;
+  S.highlight = new Set();
+  render();
+  const v0 = { ...S.view };
+  track({
+    move(ev) {
+      S.view.x = v0.x - (ev.clientX - start[0]) / S.view.scale;
+      S.view.y = v0.y - (ev.clientY - start[1]) / S.view.scale;
+      setViewBox();
+    },
+  });
+}
+
+function startProbeDrag(which, e) {
+  const start = [e.clientX, e.clientY];
+  S.probeDrag = { which, client: start, moved: false, target: null, overBoard: false, world: null };
+  track({
+    move(ev) {
+      const d = S.probeDrag;
+      if (!d) return;
+      if (!d.moved && Math.hypot(ev.clientX - start[0], ev.clientY - start[1]) < 5) return;
+      d.moved = true;
+      d.client = [ev.clientX, ev.clientY];
+      const r = svg().getBoundingClientRect();
+      d.overBoard = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      d.world = d.overBoard ? toWorld(ev) : null;
+      d.target = d.overBoard ? findTarget(indexCircuit(S.circuit), S.circuit, d.world, { pinRadius: 16 / S.view.scale, wireRadius: 12 / S.view.scale }) : null;
+      render();
+    },
+    up() {
+      const d = S.probeDrag;
+      S.probeDrag = null;
+      if (!d) return;
+      if (!d.moved) { S.armed = S.armed === which ? null : which; render(); return; }
+      S.armed = null;
+      commit(() => { S.probes[which] = d.target ? toAtt(d.target) : null; });
+    },
+  });
+  render();
+}
+
+function onBoardMove(e) {
+  if (S.probeDrag) return;
+  const pal = PALETTE.find((x) => x.key === S.tool && x.type);
+  if (pal) { S.ghostAt = toWorld(e); render(); return; }
+  if (S.pending && e.buttons === 0) { S.pending.to = toWorld(e); render(); return; }
+  if (e.pointerType === 'mouse' && e.buttons === 0) showTip(e);
+}
+
+function onKey(e) {
+  if (e.target.closest('input, select, textarea')) {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (mod) return;
+  if (e.key === 'Escape') {
+    if (S.pending) cancelWire();
+    S.tool = 'select'; S.ghostAt = null; S.armed = null; S.sel = null; S.highlight = new Set();
+    render();
+  } else if (e.key === 'r' || e.key === 'R') {
+    const pal = PALETTE.find((x) => x.key === S.tool && x.type);
+    if (pal) { S.ghostRot = (S.ghostRot + 1) % 4; render(); } else act('rotate');
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (S.sel) { e.preventDefault(); act('delete'); }
+  } else if (e.key === 'w' || e.key === 'W') { setTool('wire'); }
+}
+
+function setTool(key) {
+  if (S.pending) cancelWire();
+  S.tool = S.tool === key && key !== 'select' ? 'select' : key;
+  S.ghostAt = null;
+  S.armed = null;
+  if (S.tool !== 'select') S.sel = null;
+  render();
+}
+
+/** Actions from buttons and keys. */
+function act(name, el) {
+  const item = findSel();
+  switch (name) {
+    case 'rotate':
+      if (!item) return;
+      if (S.sel.kind === 'wire') return act('flip');
+      if (item.type === 'junction') return;
+      commit(() => { item.layout.rot = ((item.layout.rot || 0) + 1) % 4; });
+      return;
+    case 'flip':
+      if (S.sel && S.sel.kind === 'wire') commit(() => { item.layout = { ...(item.layout || {}), bend: (item.layout && item.layout.bend) === 'vh' ? 'hv' : 'vh' }; });
+      return;
+    case 'delete':
+      if (!item) return;
+      commit(() => { if (S.sel.kind === 'wire') removeWire(item.id); else removeComponent(item.id); S.sel = null; });
+      return;
+    case 'cut':
+      commit(() => { item.cut = !item.cut; });
+      return;
+    case 'toggle':
+      commit(() => { item.params.closed = !item.params.closed; });
+      return;
+    case 'replace-fuse':
+      // Changing a fuse means opening the meter, so the leads come off the circuit first.
+      S.meter.fuses = { mA: 'ok', A: 'ok' };
+      S.blowEvent = null;
+      S.probes = { red: null, black: null };
+      afterChange();
+      toast('New fuse in. The probes came off the circuit; place them again.');
+      return;
+    case 'deselect':
+      S.sel = null;
+      render();
+      return;
+    case 'park':
+      commit(() => { S.probes = { red: null, black: null }; });
+      return;
+    default:
+  }
+  void el;
+}
+
+function onPanelClick(e) {
+  const t = e.target;
+  const btn = t.closest('[data-act]');
+  if (btn) { act(btn.dataset.act, btn); return; }
+  const dialEl = t.closest('[data-dial]');
+  if (dialEl) { setDial(dialEl.dataset.dial); return; }
+  const jackEl = t.closest('[data-jack]');
+  if (jackEl) { setJack(jackEl.dataset.jack); return; }
+  const ser = t.closest('[data-series]');
+  if (ser) { S.series = ser.dataset.series; render(); return; }
+  const pre = t.closest('[data-preset]');
+  if (pre) {
+    const c = findSel();
+    commit(() => {
+      Object.assign(c.params, PRESETS[pre.dataset.preset]);
+      c.style = pre.dataset.preset === 'bench' ? undefined : 'battery';
+      if (!c.style) delete c.style;
+    });
+    return;
+  }
+  const issue = t.closest('.issue[data-ids]');
+  if (issue) { S.highlight = new Set(issue.dataset.ids.split(',').filter(Boolean)); render(); }
+}
+
+function setDial(id) {
+  S.meter.dial = id;
+  S.blowEvent = null;
+  afterChange();
+}
+function setJack(id) {
+  if (jackOf(profile, id).kind === 'common') { toast('The black lead stays in COM. Click another jack to move the red lead.'); return; }
+  S.meter.red = id;
+  S.blowEvent = null;
+  afterChange();
+}
+
+function onPanelChange(e) {
+  const t = e.target;
+  const c = findSel();
+  if (!c) return;
+  if (t.matches('input.num')) {
+    const raw = t.value.trim();
+    const key = t.dataset.param;
+    if (key === 'ilimit' && raw === '') { commit(() => { c.params.ilimit = null; }); return; }
+    const v = parseEng(raw);
+    const bad = v === null || ((key === 'R' || key === 'ilimit') && !(v > 0)) || (key === 'r' && v < 0);
+    if (bad) {
+      t.classList.add('bad');
+      t.setCustomValidity('Use a number like 4.7k, 220 or 1M');
+      t.reportValidity();
+      return;
+    }
+    commit(() => { c.params[key] = v; });
+  } else if (t.matches('[data-pick]')) {
+    if (t.value) commit(() => { c.params.R = Number(t.value); });
+  } else if (t.matches('[data-param-select]')) {
+    commit(() => { c.params[t.dataset.paramSelect] = Number(t.value); });
+  }
+}
+
+let toastTimer = 0;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+}
+
+/* ================================================================ boot */
+
+async function boot() {
+  try {
+    profile = await (await fetch('/static/circuit/meters/fluke-87v.json')).json();
+  } catch {
+    $('status').textContent = "Couldn't load the meter profile. Check your connection and reload.";
+    return;
+  }
+  let loaded = false;
+  const hash = location.hash.match(/^#c=(.+)$/);
+  if (hash) {
+    loaded = loadState(await decodeShare(hash[1]));
+    if (!loaded) toast("That share link didn't contain a circuit.");
+    history.replaceState(null, '', location.pathname);
+  }
+  if (!loaded) loaded = loadState(store.get());
+
+  const board = svg();
+  board.addEventListener('pointerdown', onBoardDown);
+  board.addEventListener('pointermove', onBoardMove);
+  board.addEventListener('pointerleave', () => { $('tip').hidden = true; if (S.ghostAt) { S.ghostAt = null; render(); } });
+  board.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+  board.addEventListener('dblclick', (e) => {
+    const hit = e.target.closest('[data-hit="comp"]');
+    if (!hit) return;
+    const c = comp(hit.dataset.id);
+    if (c && c.type === 'switch') { act('toggle'); return; }
+    const input = $('inspector').querySelector('input.num');
+    if (input) { input.focus(); input.select(); }
+  });
+  $('palette').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
+  for (const id of ['inspector', 'meterCard', 'issues']) {
+    $(id).addEventListener('click', onPanelClick);
+    $(id).addEventListener('change', onPanelChange);
+    $(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('input.num')) e.target.blur();
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-dial], [data-jack]')) { e.preventDefault(); onPanelClick(e); }
+    });
+    $(id).addEventListener('input', (e) => { if (e.target.matches('input.num')) { e.target.classList.remove('bad'); e.target.setCustomValidity(''); } });
+  }
+  $('meterCard').addEventListener('pointerdown', (e) => {
+    const chip = e.target.closest('[data-probe-chip]');
+    if (chip) { e.preventDefault(); startProbeDrag(chip.dataset.probeChip, e); }
+  });
+  $('meterCard').addEventListener('animationend', () => $('meterCard').classList.remove('blowing'));
+  $('undoBtn').onclick = undo;
+  $('redoBtn').onclick = redo;
+  $('overlayBtn').onclick = () => { S.overlay = !S.overlay; save(); render(); };
+  $('shareBtn').onclick = share;
+  $('fitBtn').onclick = fit;
+  $('zoomIn').onclick = () => zoomAt(1.25);
+  $('zoomOut').onclick = () => zoomAt(0.8);
+  $('examples').onchange = (e) => {
+    const v = e.target.value;
+    e.target.value = '';
+    if (!v) return;
+    if (S.circuit.components.length && !window.confirm('Replace the circuit on the board?')) return;
+    commit(() => { S.circuit = v === 'blank' ? createCircuit() : example(v); S.probes = { red: null, black: null }; S.sel = null; });
+    fit();
+    render();
+  };
+  window.addEventListener('keydown', onKey);
+  new ResizeObserver(() => setViewBox()).observe(board);
+
+  render();
+  fit();
+  render();
+}
+
+boot();

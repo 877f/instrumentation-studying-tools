@@ -300,12 +300,12 @@ function circuitChecks(net, components, states, sol) {
 
   // Unconnected pins: a node holding exactly one part pin and nothing else to reach.
   const pinCount = nodes.map(() => 0);
-  for (const c of comps) if (!c.def.isGround) for (const p of c.def.pins) pinCount[c.pins[p]]++;
+  for (const c of comps) if (!c.def.isGround && !c.def.isJunction) for (const p of c.def.pins) pinCount[c.pins[p]]++;
   const groundNode = net.ground;
   const hasGroundSymbol = (n) => nodes[n].terminals.some((t) => comps.some((c) => c.def.isGround && t.startsWith(`${c.id}.`)));
   const loose = new Set();      // parts with every pin unconnected
   for (const c of comps) {
-    if (c.def.isGround) continue;
+    if (c.def.isGround || c.def.isJunction) continue;
     const open = c.def.pins.filter((p) => pinCount[c.pins[p]] === 1 && !(c.pins[p] === groundNode && hasGroundSymbol(groundNode)));
     if (!open.length) continue;
     if (open.length === c.def.pins.length) {

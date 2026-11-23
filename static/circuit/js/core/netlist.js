@@ -118,7 +118,7 @@ export function buildNetlist(circuit, registry) {
     const params = { ...def.defaults, ...(c.params || {}) };
     for (const msg of def.validate ? def.validate(params, c.id) : []) issues.push(issue('error', 'bad-value', msg, [c.id]));
     for (const p of def.pins) see(`${c.id}.${p}`);
-    comps.push({ id: c.id, type: c.type, def, params });
+    comps.push({ id: c.id, type: c.type, def, params, hidden: !!c.hidden });   // hidden: the meter's own parts
   }
 
   // A wire's own ends ("W1.a") are aliases for whatever they're attached to.
@@ -189,12 +189,13 @@ export function buildNetlist(circuit, registry) {
   if (lastGround) ground = nodeOf(lastGround);
   else if (comps.length) {
     groundAuto = true;
-    const src = comps.find((c) => c.def.groundPin && !c.def.isGround);
+    const src = comps.find((c) => c.def.groundPin && !c.def.isGround && !c.hidden)
+      || comps.find((c) => c.def.groundPin && !c.def.isGround);
     if (src) {
       ground = src.pins[src.def.groundPin];
       groundNote = `${src.id}'s ${src.def.groundPin === 'n' ? '−' : src.def.groundPin} terminal`;
     } else {
-      const c = comps[0];
+      const c = comps.find((x) => !x.hidden) || comps[0];
       ground = c.pins[c.def.pins[c.def.pins.length - 1]];
       groundNote = `${c.id}'s pin ${c.def.pins[c.def.pins.length - 1]}`;
     }

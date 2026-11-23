@@ -126,6 +126,11 @@ def circuit_bench():
     return page("circuit/index.html")
 
 
+@app.get("/tools/circuit/bench")
+def circuit_editor():
+    return page("circuit/bench.html")
+
+
 @app.get("/tools/circuit/debug")
 def circuit_debug():
     return page("circuit/debug.html")
