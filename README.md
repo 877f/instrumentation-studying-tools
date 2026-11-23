@@ -154,6 +154,10 @@ Defaults I chose:
 - **Clean values:** each diagram starts from a common voltage (1.5 V to 240 V) and resistor value. A pair is used only if the current comes out clean to 3 significant figures and the power to 4. D5 keeps the current between 10 µA and 100 mA and the power at 0.1 mW or more, so no answer is absurdly small. The value lists are at the top of `chapters/circuits.py`.
 - **The formula box** checks the step 1 formula. For D4 diagrams with P labeled, that's the first unknown, such as `I = √(P/R)`.
 
+## Circuit Bench
+
+A DC circuit builder and multimeter trainer at `/tools/circuit`. It runs entirely in the browser; Flask only serves its pages. The code, and how to add parts or meters, is in [`static/circuit/README.md`](static/circuit/README.md). The solver debug page is at `/tools/circuit/debug`.
+
 ## Study guide: Geometry, Chapter 2
 
 Technical Math Chapter 2, in four sections: 2.1 Angles and lines, 2.2 Triangles, 2.3 Quadrilaterals, 2.4 Circles. It's on the home screen and at `/study/`. Each section has:
@@ -337,6 +341,7 @@ py test_wheel.py               # Ohm's Law Wheel checker: 12 formulas x spelling
 py test_app.py                 # grader and API tests
 py test_problems.py            # Household kWh and Circuit Diagrams: 200 random questions per level
 py test_study.py               # study guide: textbook fixtures, answer checker, 200 problems per type, privacy, API
+node --test                    # Circuit Bench: solver vs hand-calculated circuits, edge cases (tests/circuit/)
 ```
 
 `test_problems.py` checks that each kWh row is W × h ÷ 1000, the rows add up to the TOTAL, and the month and cost follow. For circuits it checks that V = I × R and that P = V × I = I² × R = V² ÷ R all agree. It flags any value that's negative, absurdly tiny or huge (the `RANGES` at the top), and prints the smallest and largest value it saw for each.

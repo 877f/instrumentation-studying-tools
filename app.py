@@ -106,13 +106,29 @@ def lookup():
 
 # ------------------------------------------------------------------- routes
 
-@app.get("/")
-def index():
+def page(name):
+    """Serve an HTML page from static/, with the live-reload script added under --dev."""
     if not app.config.get("DEV"):
-        return send_from_directory(app.static_folder, "index.html")
-    with open(os.path.join(app.static_folder, "index.html"), encoding="utf-8") as f:
+        return send_from_directory(app.static_folder, name)
+    with open(os.path.join(app.static_folder, name), encoding="utf-8") as f:
         html = f.read()
     return html.replace("</body>", DEV_SCRIPT + "</body>"), 200, {"Cache-Control": "no-store"}
+
+
+@app.get("/")
+def index():
+    return page("index.html")
+
+
+# Circuit Bench runs entirely in the browser (static/circuit/); the server only hands out its pages.
+@app.get("/tools/circuit")
+def circuit_bench():
+    return page("circuit/index.html")
+
+
+@app.get("/tools/circuit/debug")
+def circuit_debug():
+    return page("circuit/debug.html")
 
 
 @app.get("/healthz")

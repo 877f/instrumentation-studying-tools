@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solver Debug</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  body { color: var(--text); font-family: var(--f-sans); }
+  main { max-width: 1100px; }
+  h1 { font: 400 20px/1.3 var(--f-display); letter-spacing: .04em; margin: 8px 0 4px; }
+  .cols { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); margin-top: 16px; }
+  @media (min-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  textarea { width: 100%; min-height: 420px; box-sizing: border-box; font: 13px/1.45 var(--f-mono); padding: 12px;
+    border-radius: 10px; border: 1px solid var(--rule); background: var(--faceplate); color: var(--ink); resize: vertical; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+  select { font: inherit; padding: 8px 10px; border-radius: 8px; }
+  .out { background: var(--faceplate); color: var(--ink); border-radius: 12px; padding: 14px 16px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font: 13px/1.5 var(--f-mono); margin: 4px 0 14px; }
+  th { text-align: left; font: 700 12px/1.3 var(--f-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted);
+    border-bottom: 1px solid var(--hairline); padding: 4px 8px 4px 0; }
+  td { padding: 3px 8px 3px 0; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+  .issue { padding: 8px 10px; border-radius: 8px; margin: 0 0 8px; font-size: 14px; line-height: 1.4; }
+  .issue.error { background: var(--stop-wash); color: var(--stop-ink); }
+  .issue.warning { background: var(--amber-wash); color: var(--amber-ink); }
+  .issue.info { background: var(--go-wash); color: var(--go-ink); }
+  .issue b { font-family: var(--f-label); letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
+  h2 { font: 750 13px/1.25 var(--f-label); letter-spacing: .17em; text-transform: uppercase; color: var(--ink-muted); margin: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/tools/circuit">Circuit Bench</a>
+  <h1>Solver debug</h1>
+  <p class="help">Paste a circuit as JSON, or pick an example, then solve. Everything runs in your browser.</p>
+  <div class="cols">
+    <div>
+      <textarea id="src" spellcheck="false" aria-label="Circuit JSON"></textarea>
+      <div class="bar">
+        <select id="examples" aria-label="Examples"></select>
+        <button class="btn primary" id="go">Solve</button>
+      </div>
+    </div>
+    <div class="out" id="out" aria-live="polite"></div>
+  </div>
+</main>
+<script type="module">
+import { solve } from '/static/circuit/js/core/solver.js';
+import { deserialize } from '/static/circuit/js/core/netlist.js';
+import { formatEng } from '/static/circuit/js/core/units.js';
+
+const ground = (id = 'GND1') => ({ id, type: 'ground', params: {} });
+const R = (id, R, Pmax = 0.25) => ({ id, type: 'resistor', params: { R, Pmax } });
+const V = (id, V, r = 0.01, ilimit = null) => ({ id, type: 'vsource', params: { V, r, ilimit } });
+const w = (id, a, b) => ({ id, a, b });
+
+const EXAMPLES = {
+  'Voltage divider (12 V, 1k + 2k)': {
+    components: [V('V1', 12), R('R1', 1000), R('R2', 2000), ground()],
+    wires: [w('W1', 'V1.p', 'R1.a'), w('W2', 'R1.b', 'R2.a'), w('W3', 'R2.b', 'V1.n'), w('W4', 'GND1.g', 'V1.n')],
+  },
+  'Unbalanced Wheatstone bridge': {
+    components: [V('V1', 10, 0), R('R1', 100), R('R2', 200), R('R3', 300), R('R4', 400), R('R5', 500), ground()],
+    wires: [w('W1', 'V1.p', 'R1.a'), w('W2', 'V1.p', 'R3.a'), w('W3', 'R1.b', 'R2.a'), w('W4', 'R3.b', 'R4.a'),
+      w('W5', 'R5.a', 'R1.b'), w('W6', 'R5.b', 'R3.b'), w('W7', 'R2.b', 'V1.n'), w('W8', 'R4.b', 'V1.n'), w('W9', 'GND1.g', 'V1.n')],
+  },
+  'Bench supply in current limit (100 mA into 10 Ω)': {
+    components: [V('V1', 12, 0.01, 0.1), R('R1', 10, 5), ground()],
+    wires: [w('W1', 'V1.p', 'R1.a'), w('W2', 'R1.b', 'V1.n'), w('W3', 'GND1.g', 'V1.n')],
+  },
+  'Shorted 9 V battery': {
+    components: [V('B1', 9, 1.5), ground()],
+    wires: [w('W1', 'B1.p', 'B1.n'), w('W2', 'GND1.g', 'B1.n')],
+  },
+  'Cut wire (open circuit)': {
+    components: [V('V1', 5), R('R1', 220), ground()],
+    wires: [w('W1', 'V1.p', 'R1.a'), { ...w('W2', 'R1.b', 'V1.n'), cut: true }, w('W3', 'GND1.g', 'V1.n')],
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sel = $('examples');
+sel.innerHTML = Object.keys(EXAMPLES).map((k) => `<option>${esc(k)}</option>`).join('');
+const load = () => { $('src').value = JSON.stringify({ version: 1, ...EXAMPLES[sel.value] }, null, 2); run(); };
+sel.onchange = load;
+$('go').onclick = run;
+
+function run() {
+  const parsed = deserialize($('src').value);
+  if (parsed.error) { $('out').innerHTML = `<div class="issue error"><b>Error</b>${esc(parsed.error)}</div>`; return; }
+  const t0 = performance.now();
+  const res = solve(parsed.circuit);
+  const ms = (performance.now() - t0).toFixed(2);
+  const issues = res.issues.map((i) => `<div class="issue ${i.level}"><b>${i.level}</b>${esc(i.message)}</div>`).join('');
+  const nodes = res.nodes.map((n) => `<tr><td>${esc(n.name)}</td><td>${n.floating ? 'floating' : formatEng(n.v, 'V')}</td>
+    <td>${esc(n.terminals.join(', '))}</td></tr>`).join('');
+  const comps = Object.values(res.components).filter((c) => c.type !== 'ground').map((c) => `<tr><td>${esc(c.id)}</td>
+    <td>${formatEng(c.v, 'V')}</td><td>${formatEng(c.i, 'A')}</td><td>${formatEng(c.p, 'W')}</td>
+    <td>${esc(Object.entries(c.extra).map(([k, v]) => `${k}: ${typeof v === 'number' ? formatEng(v) : v}`).join(' · '))}</td></tr>`).join('');
+  const wires = Object.values(res.wires).map((x) => `<tr><td>${esc(x.id)}</td><td>${x.cut ? `cut (${esc(x.ends.join(' | '))})` : esc(x.node)}</td>
+    <td>${x.cut ? '—' : formatEng(x.i, 'A')}</td></tr>`).join('');
+  $('out').innerHTML = `${issues}
+    ${res.ok ? `<h2>Nodes</h2><table><tr><th>Node</th><th>Voltage</th><th>Terminals</th></tr>${nodes}</table>
+    <h2>Parts</h2><table><tr><th>Part</th><th>V (pin 1 − pin 2)</th><th>I (in at pin 1)</th><th>P absorbed</th><th>Extra</th></tr>${comps}</table>
+    ${wires ? `<h2>Wires</h2><table><tr><th>Wire</th><th>Node</th><th>I (a → b)</th></tr>${wires}</table>` : ''}` : ''}
+    <p class="help">Solved in ${ms} ms.</p>`;
+}
+load();
+</script>
+</body>
+</html>

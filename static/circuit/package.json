@@ -1,0 +1,6 @@
+{
+  "name": "circuit-bench",
+  "private": true,
+  "type": "module",
+  "description": "Marks this folder's .js files as ES modules so `node --test` can import them. No dependencies."
+}
