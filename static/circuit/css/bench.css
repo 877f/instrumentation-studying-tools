@@ -1,0 +1,52 @@
+/* Circuit Bench: page styles on top of /static/app.css (tokens, fonts, .face, .bezel, .lamp, .btn). */
+
+.bench-hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: center; padding: clamp(18px, 4vw, 48px) 0 clamp(26px, 4vw, 44px); }
+@media (min-width: 860px) { .bench-hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); } }
+.bench-hero > * { min-width: 0; }
+.bench-hero .lede { max-width: 36ch; }
+.bench-hero .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+
+/* the demo instrument: a little schematic with a meter reading */
+.scope { border-radius: 10px; overflow: hidden; background: var(--faceplate); }
+.scope svg { display: block; width: 100%; height: auto; }
+.scope .grid { stroke: var(--hairline); stroke-width: 1; }
+.scope .trace { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.scope .part { fill: var(--faceplate); stroke: var(--ink); stroke-width: 2.6; stroke-linejoin: round; }
+.scope .dot { fill: var(--ink); }
+.scope .tag { font: 700 15px var(--f-label); letter-spacing: .12em; fill: var(--ink-muted); }
+.scope .val { font: 600 13px var(--f-mono); fill: var(--ink); }
+.scope .probe-red { stroke: var(--pointer); stroke-width: 3; fill: none; stroke-linecap: round; }
+.scope .probe-blk { stroke: var(--ink); stroke-width: 3; fill: none; stroke-linecap: round; stroke-dasharray: 1 0; }
+.scope .tip-red { fill: var(--pointer); }
+.scope .tip-blk { fill: var(--ink); }
+.scope .lcd { fill: #c9d3b4; stroke: #10151a; stroke-width: 3; }
+.scope .lcd-text { font: 700 22px var(--f-mono); fill: #1c2216; }
+.scope .lcd-unit { font: 700 13px var(--f-mono); fill: #1c2216; }
+.scope .meter-body { fill: #f2a31b; stroke: #10151a; stroke-width: 3; }
+.scope .meter-face { fill: #1d2329; }
+.scope .jack { fill: #0b0f13; stroke: #59636d; stroke-width: 2; }
+.scope .jack.red { stroke: var(--pointer); }
+.scope .verdict { font: 800 12px var(--f-label); letter-spacing: .16em; fill: #f6f4ec; }
+@media (prefers-color-scheme: dark) { .scope .lcd { fill: #a9b596; } }
+
+/* module status panel */
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.modules { padding: 6px clamp(14px, 3vw, 24px); }
+.module { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 16px; align-items: center;
+  padding: 16px 0; border-bottom: 1px solid var(--rule); color: inherit; text-decoration: none; }
+.module:last-child { border-bottom: 0; }
+.module .lamp { grid-row: span 2; }
+.module h2 { font: 750 19px/1.2 var(--f-sans); letter-spacing: -.01em; }
+.module p { grid-column: 2; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.module .state { grid-row: 1 / span 2; grid-column: 3; font: 750 12px/1 var(--f-label); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; }
+a.module .state { color: var(--go-ink); }
+a.module .state::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor; transform: translateY(-1px) rotate(45deg); transition: transform .15s ease-out; }
+a.module:hover h2 { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+a.module:hover .state::after { transform: translate(3px, -1px) rotate(45deg); }
+
+.bench-notes { display: grid; gap: clamp(20px, 3vw, 32px); margin-top: clamp(30px, 4vw, 44px); }
+@media (min-width: 760px) { .bench-notes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.bench-notes h3 { margin-top: 8px; font: 750 18px/1.25 var(--f-sans); }
+.bench-notes p { margin-top: 6px; color: var(--muted); font-size: 15px; line-height: 1.45; }

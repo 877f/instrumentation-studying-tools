@@ -4,15 +4,130 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Circuit Bench</title>
-<meta name="description" content="Build DC circuits, probe them with a virtual multimeter, and check your leads before you touch real hardware.">
+<meta name="description" content="Build DC circuits, probe them with a virtual multimeter, and find out if you'd blow the fuse before you touch real hardware.">
+<meta property="og:title" content="Circuit Bench · Instrumentation Nation">
+<meta property="og:description" content="Build DC circuits, probe them with a virtual multimeter, and find out if you'd blow the fuse before you touch real hardware.">
+<meta name="theme-color" content="#2b4862" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e151c" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121920'/%3E%3Crect x='3' y='3' width='26' height='19' rx='3' fill='%23f6f4ec'/%3E%3Cpath d='M4 16A17 17 0 0 1 28 16' fill='none' stroke='%2317191b' stroke-width='1.8'/%3E%3Cpath d='M16 28 24 10.8' stroke='%23d42b1e' stroke-width='2.4' stroke-linecap='round'/%3E%3Crect x='3' y='22' width='26' height='7' fill='%23121920'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/sofia-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/michroma.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/circuit/css/bench.css">
 </head>
 <body>
 <main>
-  <a class="back" href="/">Instrumentation Nation</a>
-  <h1 class="wordmark" style="margin-top:12px"><span>Circuit</span> <span>Bench</span></h1>
-  <p class="lede">Under construction. The circuit solver is done; the editor and the meter come next.</p>
-  <p class="fine"><a class="link" href="/tools/circuit/debug">Open the solver debug page</a></p>
+  <header class="rail">
+    <a class="back" href="/">Home</a>
+    <a class="brand" href="/" aria-label="Instrumentation Nation home"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#121920"/><rect x="3" y="3" width="26" height="19" rx="3" fill="#f6f4ec"/><path d="M4 16A17 17 0 0 1 28 16" fill="none" stroke="#17191b" stroke-width="1.8"/><path d="M16 28 24 10.8" stroke="#d42b1e" stroke-width="2.4" stroke-linecap="round"/><rect x="3" y="22" width="26" height="7" fill="#121920"/></svg><span>Instrumentation Nation</span></a>
+  </header>
+
+  <section class="bench-hero">
+    <div>
+      <h1 class="wordmark"><span>Circuit</span> <span>Bench</span></h1>
+      <p class="lede">Build a circuit, probe it with a virtual multimeter, and find out if you'd blow the fuse before you touch real hardware.</p>
+      <div class="actions">
+        <a class="btn primary" href="/tools/circuit/debug">Try the solver</a>
+      </div>
+    </div>
+
+    <div class="bezel" aria-hidden="true">
+      <div class="scope">
+        <svg viewBox="0 0 480 300">
+          <defs>
+            <pattern id="bench-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path class="grid" d="M20 0H0V20" fill="none"/></pattern>
+          </defs>
+          <rect width="480" height="300" fill="url(#bench-grid)"/>
+          <!-- 12 V supply, R1 1k, R2 2k: the divider from the tests -->
+          <path class="trace" d="M60 120V40H160M220 40H280V100M280 160V220H60V180"/>
+          <circle class="part" cx="60" cy="150" r="28"/>
+          <path class="trace" d="M60 132v12M54 138h12M54 162h12"/>
+          <path class="part" d="M160 40l5-10 10 20 10-20 10 20 10-20 10 20 5-10"/>
+          <path class="part" d="M280 100l-10 5 20 10-20 10 20 10-20 10 20 10-10 5"/>
+          <circle class="dot" cx="280" cy="100" r="4.5"/>
+          <circle class="dot" cx="280" cy="220" r="4.5"/>
+          <text class="tag" x="100" y="146">V1</text><text class="val" x="100" y="166">12 V</text>
+          <text class="tag" x="178" y="22">R1</text><text class="val" x="212" y="22">1 kΩ</text>
+          <text class="tag" x="296" y="128">R2</text><text class="val" x="296" y="146">2 kΩ</text>
+          <text class="tag" x="120" y="242">GND</text>
+          <!-- meter -->
+          <path class="probe-red" d="M280 100C330 70 340 90 384 128"/>
+          <path class="probe-blk" d="M280 220C330 250 360 250 404 214"/>
+          <circle class="tip-red" cx="280" cy="100" r="7"/>
+          <circle class="tip-blk" cx="280" cy="220" r="7"/>
+          <rect class="meter-body" x="350" y="40" width="112" height="196" rx="16"/>
+          <rect class="meter-face" x="362" y="52" width="88" height="172" rx="8"/>
+          <rect class="lcd" x="368" y="62" width="76" height="46" rx="4"/>
+          <text class="lcd-text" x="373" y="95">8.00</text>
+          <text class="lcd-unit" x="429" y="95">V</text>
+          <circle cx="406" cy="150" r="22" fill="#2c343c" stroke="#59636d" stroke-width="2"/>
+          <path d="M406 150l-12-14" stroke="#f6f4ec" stroke-width="4" stroke-linecap="round"/>
+          <circle class="jack red" cx="384" cy="206" r="7"/>
+          <circle class="jack" cx="406" cy="206" r="7"/>
+          <circle class="jack" cx="428" cy="206" r="7"/>
+          <rect x="364" y="246" width="84" height="22" rx="11" fill="#2ba84a"/>
+          <text class="verdict" x="388" y="261">SAFE</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <div class="panel-head">
+    <span class="label">Bench status</span>
+    <span class="label">1 of 5 online</span>
+  </div>
+  <section class="face modules" aria-label="What's built so far">
+    <a class="module" href="/tools/circuit/debug">
+      <span class="lamp go"></span>
+      <h2>Circuit solver</h2>
+      <p>Node voltages, branch currents and power for any DC circuit, with plain-English warnings when something's wrong.</p>
+      <span class="state">Open</span>
+    </a>
+    <div class="module">
+      <span class="lamp amber blink"></span>
+      <h2>Schematic editor</h2>
+      <p>Drop in supplies, resistors and switches, wire them up, and watch the values update as you go.</p>
+      <span class="state">Next up</span>
+    </div>
+    <div class="module">
+      <span class="lamp"></span>
+      <h2>Multimeter and fuse check</h2>
+      <p>Pick jacks and a dial setting, place the leads, and see the reading, or see the fuse blow.</p>
+      <span class="state">Coming</span>
+    </div>
+    <div class="module">
+      <span class="lamp"></span>
+      <h2>Where do my leads go?</h2>
+      <p>Step-by-step lead placement for any measurement, plus a "show me the mistake" replay.</p>
+      <span class="state">Coming</span>
+    </div>
+    <div class="module">
+      <span class="lamp"></span>
+      <h2>Breadboard view</h2>
+      <p>The same circuit on a full-size breadboard, with holes, rails and jumpers.</p>
+      <span class="state">Coming</span>
+    </div>
+  </section>
+
+  <section class="bench-notes">
+    <div>
+      <span class="label">Why</span>
+      <h3>Blown fuses are cheap lessons. Here they're free.</h3>
+      <p>Leaving the red lead in the amps jack and probing across a supply is the classic way to pop a meter fuse. Try it here first.</p>
+    </div>
+    <div>
+      <span class="label">How</span>
+      <h3>The meter is part of the circuit</h3>
+      <p>The meter isn't just showing a number. It's solved as a real part, with its input resistance and fuse, so the result is what your bench would do.</p>
+    </div>
+    <div>
+      <span class="label">Where</span>
+      <h3>Runs in your browser</h3>
+      <p>Nothing to install, and your circuits stay on your device.</p>
+    </div>
+  </section>
 </main>
+<div class="credit tag">Designed by Jay</div>
+<div class="credit">Made by Cannon</div>
 </body>
 </html>
