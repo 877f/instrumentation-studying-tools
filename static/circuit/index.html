@@ -28,6 +28,7 @@
       <p class="lede">Build a circuit, probe it with a virtual multimeter, and find out if you'd blow the fuse before you touch real hardware.</p>
       <div class="actions">
         <a class="btn primary" href="/tools/circuit/bench">Open the bench</a>
+        <a class="btn" href="/tools/circuit/bench#demo">Teacher demo</a>
       </div>
     </div>
 
@@ -74,7 +75,7 @@
 
   <div class="panel-head">
     <span class="label">Bench status</span>
-    <span class="label">3 of 5 online</span>
+    <span class="label">All online</span>
   </div>
   <section class="face modules" aria-label="What's built so far">
     <a class="module" href="/tools/circuit/bench">
@@ -89,24 +90,18 @@
       <p>Pick jacks and a dial setting, place the leads, and see the reading, or see the fuse blow.</p>
       <span class="state">Open</span>
     </a>
+    <a class="module" href="/tools/circuit/bench#demo">
+      <span class="lamp go"></span>
+      <h2>Teacher demo</h2>
+      <p>An eleven-step tour of right and wrong measurements: reversed leads, blown fuses, ohms on a live circuit, a cooking resistor.</p>
+      <span class="state">Run it</span>
+    </a>
     <a class="module" href="/tools/circuit/debug">
       <span class="lamp go"></span>
       <h2>Circuit solver</h2>
       <p>The math underneath: node voltages, branch currents and power, with plain-English warnings.</p>
       <span class="state">Debug page</span>
     </a>
-    <div class="module">
-      <span class="lamp amber blink"></span>
-      <h2>Where do my leads go?</h2>
-      <p>Step-by-step lead placement for any measurement, plus a "show me the mistake" replay.</p>
-      <span class="state">Next up</span>
-    </div>
-    <div class="module">
-      <span class="lamp"></span>
-      <h2>Breadboard view</h2>
-      <p>The same circuit on a full-size breadboard, with holes, rails and jumpers.</p>
-      <span class="state">Coming</span>
-    </div>
   </section>
 
   <section class="bench-notes">

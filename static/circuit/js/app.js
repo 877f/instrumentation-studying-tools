@@ -9,6 +9,7 @@ import { measure, initialMeter, userIssues, dialOf, jackOf } from './meter/meter
 import { meterFace } from './views/meter-face.js';
 import { renderBoard, indexCircuit, findTarget, attachTerm, attachPoint, bounds, short } from './views/schematic.js';
 import { SHAPES, snap, pinDir, nearestOn, resistorBands, E12, E24 } from './views/symbols.js';
+import { buildDemo, DEMO_STEPS } from './demo.js';
 
 const STORE_KEY = 'circuit-bench:v1';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -50,6 +51,7 @@ const S = {
   undo: [],
   redo: [],
   last: null,                              // last measurement, for tooltips and panels
+  demo: null,                              // { step } while the teacher demo is running
 };
 
 /* ================================================================ model edits */
@@ -281,6 +283,49 @@ function example(name) {
   return c;
 }
 
+/* ================================================================ teacher demo */
+
+function startDemo() {
+  pushUndo();
+  S.circuit = buildDemo(registry);
+  S.demo = { step: 0 };
+  applyDemoStep(0, { history: false });
+  fit();
+  render();
+}
+
+function applyDemoStep(i, { history = true } = {}) {
+  const st = DEMO_STEPS[i];
+  if (!st) return;
+  if (history) pushUndo();
+  for (const [id, closed] of Object.entries(st.switches)) { const c = comp(id); if (c) c.params.closed = closed; }
+  for (const [id, cut] of Object.entries(st.cuts)) { const w = wire(id); if (w) w.cut = cut; }
+  S.meter = { ...S.meter, dial: st.dial, red: st.red, fuses: { mA: 'ok', A: 'ok' } };
+  S.blowEvent = null;
+  S.probes = { red: st.probes[0], black: st.probes[1] };
+  S.sel = st.select ? { kind: 'comp', id: st.select } : null;
+  S.highlight = new Set();
+  S.demo = { step: i };
+  afterChange();
+}
+
+function renderDemo() {
+  const el = $('demoCard');
+  el.hidden = !S.demo;
+  if (!S.demo) { el.innerHTML = ''; return; }
+  const i = S.demo.step, st = DEMO_STEPS[i], last = i === DEMO_STEPS.length - 1;
+  el.innerHTML = `<div class="card-head"><span class="label">Teacher demo · ${i + 1} of ${DEMO_STEPS.length}</span>
+      <button class="close" data-act="demo-exit" aria-label="End the demo">×</button><h2>${esc(st.title)}</h2></div>
+    <div class="steps" role="group" aria-label="Demo steps">${DEMO_STEPS.map((s, j) => `<button class="${j === i ? 'on' : ''}"
+      data-demo-step="${j}" title="${esc(s.title)}" aria-label="Step ${j + 1}: ${esc(s.title)}" aria-current="${j === i}">${j + 1}</button>`).join('')}</div>
+    <p class="look"><b>What happens</b>${esc(st.look)}</p>
+    <p class="why"><b>Why it matters</b>${esc(st.why)}</p>
+    <div class="row-btns">
+      <button class="btn" data-act="demo-prev" ${i === 0 ? 'disabled' : ''}>Back</button>
+      <button class="btn primary" data-act="demo-next">${last ? 'Start over' : 'Next step'}</button>
+    </div>`;
+}
+
 /* ================================================================ view: board */
 
 const svg = () => $('board');
@@ -304,7 +349,7 @@ function fit() {
   const w = el.clientWidth || 800, h = el.clientHeight || 600;
   if (!b) { S.view = { x: -40, y: -40, scale: 1 }; setViewBox(); return; }
   // On wide screens keep the left edge clear for the floating part editor.
-  const reserve = window.innerWidth > 960 && w > 700 ? 320 : 0;
+  const reserve = S.sel && window.innerWidth > 960 && w > 700 ? 320 : 0;
   const scale = Math.max(0.4, Math.min((w - reserve) / (b.x1 - b.x0), h / (b.y1 - b.y0), 1.6));
   S.view = { scale, x: (b.x0 + b.x1) / 2 - (reserve + (w - reserve) / 2) / scale, y: (b.y0 + b.y1) / 2 - h / scale / 2 };
   setViewBox();
@@ -359,6 +404,7 @@ function render() {
   renderToolbar();
   renderPalette();
   renderInspector(m);
+  renderDemo();
   renderMeter(m);
   renderIssues(m);
   renderStatus();
@@ -819,6 +865,16 @@ function act(name, el) {
       S.sel = null;
       render();
       return;
+    case 'demo-prev':
+      if (S.demo && S.demo.step > 0) applyDemoStep(S.demo.step - 1);
+      return;
+    case 'demo-next':
+      if (S.demo) applyDemoStep((S.demo.step + 1) % DEMO_STEPS.length);
+      return;
+    case 'demo-exit':
+      S.demo = null;
+      render();
+      return;
     case 'park':
       commit(() => { S.probes = { red: null, black: null }; });
       return;
@@ -835,6 +891,8 @@ function onPanelClick(e) {
   if (dialEl) { setDial(dialEl.dataset.dial); return; }
   const jackEl = t.closest('[data-jack]');
   if (jackEl) { setJack(jackEl.dataset.jack); return; }
+  const step = t.closest('[data-demo-step]');
+  if (step) { applyDemoStep(Number(step.dataset.demoStep)); return; }
   const ser = t.closest('[data-series]');
   if (ser) { S.series = ser.dataset.series; render(); return; }
   const pre = t.closest('[data-preset]');
@@ -913,6 +971,8 @@ async function boot() {
     history.replaceState(null, '', location.pathname);
   }
   if (!loaded) loaded = loadState(store.get());
+  const wantDemo = location.hash === '#demo';
+  if (wantDemo) history.replaceState(null, '', location.pathname);
 
   const board = svg();
   board.addEventListener('pointerdown', onBoardDown);
@@ -928,7 +988,7 @@ async function boot() {
     if (input) { input.focus(); input.select(); }
   });
   $('palette').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
-  for (const id of ['inspector', 'meterCard', 'issues']) {
+  for (const id of ['inspector', 'demoCard', 'meterCard', 'issues']) {
     $(id).addEventListener('click', onPanelClick);
     $(id).addEventListener('change', onPanelChange);
     $(id).addEventListener('keydown', (e) => {
@@ -954,6 +1014,8 @@ async function boot() {
     e.target.value = '';
     if (!v) return;
     if (S.circuit.components.length && !window.confirm('Replace the circuit on the board?')) return;
+    if (v === 'demo') { startDemo(); return; }
+    S.demo = null;
     commit(() => { S.circuit = v === 'blank' ? createCircuit() : example(v); S.probes = { red: null, black: null }; S.sel = null; });
     fit();
     render();
@@ -961,6 +1023,7 @@ async function boot() {
   window.addEventListener('keydown', onKey);
   new ResizeObserver(() => setViewBox()).observe(board);
 
+  if (wantDemo) { startDemo(); return; }
   render();
   fit();
   render();

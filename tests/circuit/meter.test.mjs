@@ -191,3 +191,19 @@ test('one probe placed: no measurement, no crash', () => {
   assert.equal(m.placed, false);
   assert.equal(m.display.text, '0.000');
 });
+
+test('ohms: a separate battery loop sharing ground is not "live"', () => {
+  const b = builder();
+  b.V('s', 'gnd', 12, { r: 0.01, ilimit: null });
+  b.S('s', 't', false);                        // bench supply switched off
+  b.R('t', 'm', 1000);
+  b.R('m', 'gnd', 2000);
+  b.V('bp', 'gnd', 9, { r: 1.5, ilimit: null }); // a battery and its own load, tied to the same ground
+  b.R('bp', 'gnd', 10, { Pmax: 10 });
+  const m = measure(b.circuit, profile, meter('ohm', 'VOhm', ['R2.a', 'R2.b']));
+  assert.ok(!codes(m).includes('ohms-live'), codes(m).join(','));
+  assert.equal(m.display.text, '2.000');
+  b.circuit.components.find((c) => c.id === 'S1').params.closed = true;
+  const live = measure(b.circuit, profile, meter('ohm', 'VOhm', ['R2.a', 'R2.b']));
+  assert.match(live.warnings.find((x) => x.code === 'ohms-live').message, /^V1 is connected/);
+});

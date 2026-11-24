@@ -2,6 +2,7 @@
    independent of the reading. Each warning says why it's bad in plain words. */
 
 import { buildNetlist, UnionFind } from '../core/netlist.js';
+import { solve } from '../core/solver.js';
 import { formatEng } from '../core/units.js';
 
 const list = (a) => (a.length < 3 ? a.join(' and ') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`);
@@ -82,14 +83,18 @@ export function findMismatches(ctx) {
   // Ohms on a live circuit, or on a part that's still wired in.
   if (fn === 'resistance' && jack.id === 'VOhm') {
     const pathsOf = (c) => (c.def.paths ? c.def.paths(c.params, c.def.initState ? c.def.initState(c.params) : {}) : []);
-    const isSource = (c) => c.type === 'vsource' || c.type === 'isource';
-    // The measured network: everything joined to the probes through passive parts.
-    const passive = new UnionFind();
-    for (const c of net.comps) if (!isSource(c)) for (const [p, q] of pathsOf(c)) passive.union(c.pins[p], c.pins[q]);
-    const reach = new Set([passive.find(nr), passive.find(nb)]);
-    // A source can push current through it only if both its terminals reach it.
-    const live = net.comps.filter((c) => isSource(c) && ((c.type === 'vsource' && c.params.V !== 0) || (c.type === 'isource' && c.params.I !== 0))
-      && reach.has(passive.find(c.pins.p)) && reach.has(passive.find(c.pins.n)));
+    // A source makes the reading garbage only if it puts a voltage across the probes.
+    // Check each one alone (superposition): zero the others, solve without the meter, look at the probes.
+    const live = net.comps.filter((c) => !c.hidden && ((c.type === 'vsource' && c.params.V !== 0) || (c.type === 'isource' && c.params.I !== 0)))
+      .filter((src) => {
+        const solo = { ...ctx.circuit, components: ctx.circuit.components.map((c) => {
+          if (c.id === src.id || (c.type !== 'vsource' && c.type !== 'isource')) return c;
+          return { ...c, params: { ...c.params, ...(c.type === 'vsource' ? { V: 0 } : { I: 0 }) } };
+        }) };
+        const r = solve(solo, { registry: ctx.registry });
+        const dv = r.ok ? r.voltage(red, black) : null;
+        return dv !== null && Math.abs(dv) > 1e-3;
+      });
     if (live.length) {
       out.push(w('danger', 'ohms-live', 'Measuring ohms on a powered circuit',
         `${list(live.map((c) => c.id))} ${live.length > 1 ? 'are' : 'is'} connected to what you're measuring. An ohmmeter pushes its `

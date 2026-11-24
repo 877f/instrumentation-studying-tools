@@ -44,7 +44,7 @@ select.tbtn option { color: #17191b; }
 .board { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }
 .status { margin: 8px 2px 0; min-height: 1.3em; font-size: 14px; color: var(--muted); }
 
-.side { overflow-y: auto; min-height: 0; display: grid; align-content: start; gap: 12px; padding-bottom: 8px; }
+.side { overflow-y: auto; overflow-x: hidden; min-height: 0; display: grid; align-content: start; gap: 12px; padding-bottom: 8px; }
 .card { background: var(--faceplate); color: var(--ink); border-radius: var(--r); padding: 14px 16px 16px;
   --text: var(--ink); --muted: var(--ink-muted); --rule: var(--hairline);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 0 0 1px rgba(0, 0, 0, .18), 0 14px 28px -20px rgba(0, 0, 0, .7); }
@@ -223,6 +223,18 @@ select.tbtn option { color: #17191b; }
 @keyframes blowflash { 0% { opacity: 0; } 8% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
 @media (prefers-reduced-motion: reduce) { .meter-card.blowing, .meter-card.blowing::after { animation: none; } }
+
+/* teacher demo */
+.demo-card { border-top: 4px solid var(--sel); }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.steps button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--hairline); background: var(--faceplate-2);
+  color: var(--ink); font: 700 13px var(--f-mono); cursor: pointer; padding: 0; }
+.steps button:hover { border-color: var(--sel); }
+.steps button.on { background: var(--sel); border-color: var(--sel); color: #fff; }
+@media (prefers-color-scheme: dark) { .steps button.on { color: #0b1520; } }
+.demo-card .look, .demo-card .why { margin: 12px 0 0; font-size: 14.5px; line-height: 1.45; }
+.demo-card .look b, .demo-card .why b { display: block; font: 750 11.5px/1.3 var(--f-label); letter-spacing: .15em; text-transform: uppercase;
+  color: var(--ink-muted); margin-bottom: 3px; }
 
 /* issues */
 .issue { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; width: 100%; text-align: left;

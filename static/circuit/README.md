@@ -16,6 +16,8 @@ A DC circuit builder and multimeter safety trainer that runs entirely in the bro
 
 The circuit autosaves in the browser. **Share** copies a link that holds the whole circuit.
 
+**Teacher demo** (Examples menu, or `/tools/circuit/bench#demo`) loads one board and walks through eleven setups: voltage done right, reversed leads, current through a cut wire, an ammeter across a supply, the red lead left in mA, the wrong current jack, a resistor over its power rating, ohms on a live circuit, in-circuit ohms, and lifting a leg. The steps live in `js/demo.js`; `tests/circuit/demo.test.mjs` checks that each step's on-screen text matches what the engine actually shows.
+
 It's plain ES modules, with no build step and no dependencies. The model and solver code never touches the DOM, so it runs under Node.
 
 ## Run the tests
@@ -46,6 +48,7 @@ js/views/symbols.js         part geometry, symbols, wire routing, color bands
 js/views/schematic.js       renders the board, finds what's under a point
 js/views/meter-face.js      draws the meter
 js/app.js                   editor state, panels, undo, autosave
+js/demo.js                  the teacher demo circuit and its steps
 meters/fluke-87v.json       meter profile
 ```
 

@@ -23,6 +23,7 @@
       <button class="tbtn" id="overlayBtn" aria-pressed="false" title="Show every node voltage and current">Show values</button>
       <select class="tbtn" id="examples" aria-label="Load an example">
         <option value="">Examples…</option>
+        <option value="demo">Teacher demo (meter mistakes tour)</option>
         <option value="divider">Voltage divider</option>
         <option value="series-parallel">Series-parallel</option>
         <option value="blank">Blank board</option>
@@ -57,6 +58,7 @@
     </section>
 
     <aside class="side">
+      <section class="card demo-card" id="demoCard" hidden aria-label="Teacher demo"></section>
       <section class="card meter-card" id="meterCard"><div id="meterInner"></div></section>
       <section class="card" id="issues" hidden></section>
     </aside>
