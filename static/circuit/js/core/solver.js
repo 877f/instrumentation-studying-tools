@@ -230,6 +230,25 @@ function results(net, states, omega, sol, issues, freq) {
     components[c.id] = r;
   }
 
+  // Req blocks: voltage across the block, and the current its inner parts draw from port A.
+  for (const b of net.blocks) {
+    const na = net.nodeOf(`${b.id}.a`), nb = net.nodeOf(`${b.id}.b`);
+    if (na < 0 || nb < 0) continue;
+    const P = `${b.id}/`;
+    let ic = new Complex(0, 0);
+    for (const c of comps) {
+      if (!c.id.startsWith(P)) continue;
+      const pi = pinI.get(c.id) || {};
+      for (const p of c.def.pins) if (c.pins[p] === na && pi[p]) ic = ic.add(pi[p]);
+    }
+    if (na === nb) ic = new Complex(0, 0);
+    const vc = vNode[na].sub(vNode[nb]);
+    components[b.id] = {
+      id: b.id, type: 'reqblock', vc, v: vc.re, ic, i: ic.re, p: vc.mul(ic.conj()).re, extra: {},
+      pins: { a: { node: nodes[na].name, v: nodeOut[na].v, i: ic.re }, b: { node: nodes[nb].name, v: nodeOut[nb].v, i: -ic.re } },
+    };
+  }
+
   const wires = {};
   for (const w of circuitWires(net, edgeI)) wires[w.id] = w;
 

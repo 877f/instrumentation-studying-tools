@@ -27,6 +27,7 @@ import isource from './isource.js';
 import sw from './switch.js';
 import ground from './ground.js';
 import junction from './junction.js';
+import reqblock from './reqblock.js';
 
 export function createRegistry(defs = []) {
   const map = new Map();
@@ -53,4 +54,5 @@ export const registry = createRegistry([
   sw,
   ground,
   junction,
+  reqblock,
 ]);

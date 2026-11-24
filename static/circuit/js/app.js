@@ -2,12 +2,13 @@
    logic live in core/ and meter/; drawing lives in views/. */
 
 import { registry } from './components/registry.js';
-import { createCircuit, addComponent, addWire, deserialize } from './core/netlist.js';
+import { createCircuit, addComponent, addWire, deserialize, emptyInner } from './core/netlist.js';
+import { scopeAt, blockAt, findGlobal, nextTreeId, globalAttachTerm, equivalentR, isSolved, gradeGuess, blockChecks } from './core/blocks.js';
 import { parseEng, formatEng } from './core/units.js';
 import { encodeShare, decodeShare } from './core/share.js';
 import { measure, initialMeter, userIssues, dialOf, jackOf } from './meter/meter-model.js';
 import { meterFace } from './views/meter-face.js';
-import { renderBoard, indexCircuit, findTarget, attachTerm, attachPoint, bounds, short } from './views/schematic.js';
+import { renderBoard, indexCircuit, findTarget, attachPoint, bounds, short } from './views/schematic.js';
 import { SHAPES, snap, pinDir, nearestOn, resistorBands, E12, E24 } from './views/symbols.js';
 import { buildDemo, DEMO_STEPS } from './demo.js';
 
@@ -24,12 +25,15 @@ const PALETTE = [
   { key: 'select', label: 'Select', hint: 'Select and move (Esc)' },
   { key: 'wire', label: 'Wire', hint: 'Draw wires' },
   { key: 'resistor', label: 'Resistor', type: 'resistor' },
+  { key: 'reqblock', label: 'Req block', type: 'reqblock', hint: 'Place a Req block: one resistor you build from other resistors' },
   { key: 'supply', label: 'DC supply', type: 'vsource', params: PRESETS.bench },
   { key: 'battery', label: 'Battery', type: 'vsource', params: PRESETS.battery9v, style: 'battery' },
   { key: 'switch', label: 'Switch', type: 'switch' },
   { key: 'ground', label: 'Ground', type: 'ground' },
 ];
 const POWER = [0.125, 0.25, 0.5, 1, 2, 5, 10];
+const IN_BLOCK = new Set(['select', 'wire', 'resistor', 'reqblock']);   // the tools offered inside a Req block
+const TWO_PIN = new Set(['resistor', 'reqblock']);
 
 let profile = null;
 const S = {
@@ -52,7 +56,18 @@ const S = {
   redo: [],
   last: null,                              // last measurement, for tooltips and panels
   demo: null,                              // { step } while the teacher demo is running
+  path: [],                                // open Req blocks, outermost first: ['Req1', 'Req3']
+  viewStack: [],                           // each parent board's view, restored on close
+  reqMsg: null,                            // { id, ok, text } after a Req check
+  drafts: {},                              // typed-but-unchecked Req guesses, by block path
 };
+
+/* S.circuit is always the whole circuit. cur() is the one being edited: the root, or the inside
+   of the open Req block. Selections and the editing helpers below work in cur(); probes, issues
+   and solve results use global ids ("Req1/R2"), and pre() is the prefix for the open block. */
+const cur = () => scopeAt(S.circuit, S.path) || S.circuit;
+const pre = (path = S.path) => path.map((id) => `${id}/`).join('');
+const pretty = (id) => String(id).replace(/\//g, ' › ');
 
 /* ================================================================ model edits */
 
@@ -67,7 +82,13 @@ function restore(snap) {
   S.circuit = d.circuit;
   S.probes = d.probes;
   S.pending = null;
+  fixPath();
   if (S.sel && !findSel()) S.sel = null;
+}
+
+/** After an undo or load, close any open block that no longer exists. */
+function fixPath() {
+  while (S.path.length && !scopeAt(S.circuit, S.path)) { S.path.pop(); S.view = S.viewStack.pop() || S.view; }
 }
 function undo() { if (!S.undo.length) return; S.redo.push(snapshot()); restore(S.undo.pop()); afterChange(); }
 function redo() { if (!S.redo.length) return; S.undo.push(snapshot()); restore(S.redo.pop()); afterChange(); }
@@ -75,7 +96,7 @@ function redo() { if (!S.redo.length) return; S.undo.push(snapshot()); restore(S
 /** Change the model: snapshot for undo, apply, then re-check, save and redraw. */
 function commit(fn, { history = true } = {}) {
   if (history) pushUndo();
-  fn(S.circuit);
+  fn(cur());
   afterChange();
 }
 
@@ -86,41 +107,44 @@ function afterChange() {
   render();
 }
 
-const comp = (id) => S.circuit.components.find((c) => c.id === id);
-const wire = (id) => S.circuit.wires.find((w) => w.id === id);
+const comp = (id) => cur().components.find((c) => c.id === id);
+const wire = (id) => cur().wires.find((w) => w.id === id);
 function findSel() { return S.sel && (S.sel.kind === 'comp' ? comp(S.sel.id) : wire(S.sel.id)); }
 
 function dropStaleProbes() {
   for (const k of ['red', 'black']) {
     const a = S.probes[k];
     if (!a) continue;
-    const ok = a.kind === 'pin' ? !!comp(a.term.split('.')[0]) : !!wire(a.id);
+    const ok = !!findGlobal(S.circuit, a.kind === 'pin' ? a.term.split('.')[0] : a.id);
     if (!ok) S.probes[k] = null;
   }
 }
 
 function removeComponent(id) {
-  const c = S.circuit;
+  const c = cur();
   c.components = c.components.filter((x) => x.id !== id);
   c.wires = c.wires.filter((w) => !w.a.startsWith(`${id}.`) && !w.b.startsWith(`${id}.`));
   pruneJunctions();
 }
 function removeWire(id) {
-  S.circuit.wires = S.circuit.wires.filter((w) => w.id !== id);
+  cur().wires = cur().wires.filter((w) => w.id !== id);
   pruneJunctions();
 }
 /** Junctions with nothing attached are clutter; a junction joining exactly two wires in a line is kept (it's a corner). */
 function pruneJunctions(keep = null) {
-  const c = S.circuit;
+  const c = cur();
   const used = new Set(c.wires.flatMap((w) => [w.a, w.b]));
-  c.components = c.components.filter((x) => x.type !== 'junction' || x.id === keep || used.has(`${x.id}.j`));
+  c.components = c.components.filter((x) => x.type !== 'junction' || x.port || x.id === keep || used.has(`${x.id}.j`));
 }
 
 function placePart(key, at) {
   const p = PALETTE.find((x) => x.key === key);
   commit((c) => {
+    // Resistors and blocks get names unique across every level, so "R2" means one part.
+    const named = TWO_PIN.has(p.type) ? { id: nextTreeId(S.circuit, registry.get(p.type).prefix) } : {};
     const id = addComponent(c, registry, p.type, p.params ? { ...p.params } : {},
-      { layout: { x: snap(at[0]), y: snap(at[1]), rot: S.ghostRot }, ...(p.style ? { style: p.style } : {}) });
+      { layout: { x: snap(at[0]), y: snap(at[1]), rot: S.ghostRot }, ...(p.style ? { style: p.style } : {}), ...named,
+        ...(p.type === 'reqblock' ? { inner: emptyInner() } : {}) });
     S.sel = { kind: 'comp', id };
   });
 }
@@ -193,8 +217,8 @@ function cancelWire() {
   if (!S.pending) return;
   const fresh = S.pending.fresh;
   S.pending = null;
-  if (fresh && !S.circuit.wires.some((w) => w.a === `${fresh}.j` || w.b === `${fresh}.j`)) {
-    S.circuit.components = S.circuit.components.filter((x) => x.id !== fresh);
+  if (fresh && !cur().wires.some((w) => w.a === `${fresh}.j` || w.b === `${fresh}.j`)) {
+    cur().components = cur().components.filter((x) => x.id !== fresh);
     S.undo.pop();
   }
   render();
@@ -203,10 +227,45 @@ function cancelWire() {
 /* ================================================================ measuring */
 
 function probeTerm(which) {
-  if (S.probeDrag && S.probeDrag.which === which) return S.probeDrag.target ? attachTerm(S.circuit, toAtt(S.probeDrag.target)) : null;
-  return attachTerm(S.circuit, S.probes[which]);
+  if (S.probeDrag && S.probeDrag.which === which) return S.probeDrag.target ? globalAttachTerm(S.circuit, toAtt(S.probeDrag.target)) : null;
+  return globalAttachTerm(S.circuit, S.probes[which]);
 }
-const toAtt = (t) => (t.kind === 'pin' ? { kind: 'pin', term: t.term } : { kind: 'wire', id: t.id, t: t.t });
+/** A board hit in the open scope → a global probe attachment. */
+const toAtt = (t) => (t.kind === 'pin' ? { kind: 'pin', term: pre() + t.term } : { kind: 'wire', id: pre() + t.id, t: t.t });
+
+/** Where a (global) probe attachment shows on the board for `path`: on its pin or wire, on the closed
+    block that holds it, or nowhere if it's outside this board. */
+function probePoint(ix, circuit, path, att) {
+  if (!att) return null;
+  const P = pre(path);
+  const gid = att.kind === 'pin' ? att.term : att.id;
+  if (!gid.startsWith(P)) return null;
+  const rest = gid.slice(P.length);
+  const slash = rest.indexOf('/');
+  if (slash < 0) return { point: attachPoint(ix, circuit, att.kind === 'pin' ? { kind: 'pin', term: rest } : { ...att, id: rest }) };
+  const blk = circuit.components.find((c) => c.id === rest.slice(0, slash));
+  // on the block's outline, clear of its body so the block stays easy to click
+  if (!blk) return null;
+  const side = att.kind === 'pin' && /\.b$/.test(gid) ? 1 : -1;
+  const [dx, dy] = (blk.layout.rot || 0) % 2 ? [0, side * 33] : [side * 33, 0];
+  return { point: [blk.layout.x + dx, blk.layout.y + dy], inside: true };
+}
+
+/** A solve result seen from inside the block at prefix P: inner ids without the prefix. */
+function scoped(result, P) {
+  if (!P || !result || !result.ok) return result;
+  const rekey = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => k.startsWith(P)).map(([k, v]) => [k.slice(P.length), v]));
+  const out = { ...result, components: rekey(result.components), wires: rekey(result.wires),
+    nodes: result.nodes.map((n) => ({ ...n, terminals: n.terminals.filter((t) => t.startsWith(P)).map((t) => t.slice(P.length)) })) };
+  Object.defineProperties(out, {
+    nodeName: { value: (t) => result.nodeName(P + t) },
+    voltage: { value: (a, b) => result.voltage(P + a, b === undefined ? undefined : P + b) },
+  });
+  return out;
+}
+
+/** Inside a block whose Req hasn't been checked yet, the live I and V stay hidden. */
+const lockedAt = (path = S.path) => path.length > 0 && !isSolved(blockAt(S.circuit, path));
 
 function measureNow() {
   const meter = { ...S.meter, probes: { red: probeTerm('red'), black: probeTerm('black') } };
@@ -242,7 +301,15 @@ function loadState(d) {
   const r = deserialize(d.circuit);
   if (r.error) return false;
   S.circuit = r.circuit;
-  for (const c of S.circuit.components) c.layout = { x: 0, y: 0, rot: 0, ...(c.layout || {}) };
+  const fill = (circ) => {
+    for (const c of circ.components) {
+      c.layout = { x: 0, y: 0, rot: 0, ...(c.layout || {}) };
+      if (c.type === 'reqblock') { if (!c.inner) c.inner = emptyInner(); fill(c.inner); }
+    }
+  };
+  fill(S.circuit);
+  S.path = [];
+  S.viewStack = [];
   S.probes = d.probes || { red: null, black: null };
   if (d.meter) S.meter = { ...initialMeter(), ...d.meter, probes: { red: null, black: null } };
   if (typeof d.overlay === 'boolean') S.overlay = d.overlay;
@@ -287,6 +354,7 @@ function clearBoard() {
   if (!S.circuit.components.length) return;
   if (S.pending) cancelWire();
   S.demo = null;
+  closeTo(0, { quiet: true });
   commit(() => {
     S.circuit = createCircuit();
     S.probes = { red: null, black: null };
@@ -302,6 +370,7 @@ function clearBoard() {
 /* ================================================================ teacher demo */
 
 function startDemo() {
+  closeTo(0, { quiet: true });
   pushUndo();
   S.circuit = buildDemo(registry);
   S.demo = { step: 0 };
@@ -344,7 +413,7 @@ function renderDemo() {
 
 /* ================================================================ view: board */
 
-const svg = () => $('board');
+const svg = () => (S.path.length ? $('subBoard') : $('board'));
 function toWorld(e) {
   const el = svg();
   const m = el.getScreenCTM();
@@ -360,7 +429,7 @@ function setViewBox() {
   el.setAttribute('viewBox', `${S.view.x} ${S.view.y} ${w / S.view.scale} ${h / S.view.scale}`);
 }
 function fit() {
-  const b = bounds(S.circuit);
+  const b = bounds(cur());
   const el = svg();
   const w = el.clientWidth || 800, h = el.clientHeight || 600;
   if (!b) { S.view = { x: -40, y: -40, scale: 1 }; setViewBox(); return; }
@@ -379,18 +448,44 @@ function zoomAt(factor, clientX, clientY) {
   setViewBox();
 }
 
-function boardState(m) {
-  const ix = indexCircuit(S.circuit);
+/** What renderBoard needs to draw the board for `path` ([] = main board). Only the open board
+    (the innermost) is interactive; `passive` is for the small copy inside an expanded block's bubble. */
+function boardState(m, path, { passive = false } = {}) {
+  const circuit = scopeAt(S.circuit, path);
+  const active = !passive && path.length === S.path.length;
+  const P = pre(path);
+  const ix = indexCircuit(circuit);
+  const result = scoped(m.result, P);
   const probes = {};
   for (const which of ['red', 'black']) {
+    if (passive) break;
     const d = S.probeDrag && S.probeDrag.which === which ? S.probeDrag : null;
     if (d) {
-      if (d.overBoard) probes[which] = { point: d.target ? d.target.point : d.world, dragging: true, loose: !d.target };
+      if (active && d.overBoard) probes[which] = { point: d.target ? d.target.point : d.world, dragging: true, loose: !d.target };
     } else {
-      const pt = attachPoint(ix, S.circuit, S.probes[which]);
-      if (pt) probes[which] = { point: pt, armed: S.armed === which };
+      const pp = probePoint(ix, circuit, path, S.probes[which]);
+      if (pp && pp.point) probes[which] = { point: pp.point, armed: S.armed === which, loose: pp.inside, inside: pp.inside };
     }
   }
+  const blockInfo = new Map();
+  for (const c of circuit.components) if (c.type === 'reqblock') blockInfo.set(c.id, { R: equivalentR(c.inner).R, solved: isSolved(c) });
+  // Current and voltage drop on each resistor and block: always inside a block, and on the main
+  // board while "Show values" is on. A block whose Req isn't checked yet shows "?" (they'd give Req away).
+  let values = null;
+  if ((path.length || (S.overlay && !passive)) && result && result.ok) {
+    const locked = lockedAt(path);
+    values = new Map();
+    for (const c of circuit.components) {
+      const r = result.components[c.id];
+      if (!TWO_PIN.has(c.type) || !r) continue;
+      values.set(c.id, locked || (c.type === 'reqblock' && !isSolved(c)) ? 'locked' : { v: r.v, i: r.i });
+    }
+  }
+  const hl = new Set();
+  for (const id of S.highlight) if (id.startsWith(P)) hl.add(id.slice(P.length).split('/')[0]);
+  const base = { circuit, result, blockInfo, values, highlight: hl, overlay: !path.length && !passive && S.overlay,
+    bubble: (c) => renderBoard(boardState(m, [...path, c.id], { passive: true })) };
+  if (!active) return { ...base, sel: null, probes, ghost: null, pending: null, target: null };
   let ghost = null;
   const pal = PALETTE.find((x) => x.key === S.tool && x.type);
   if (pal && S.ghostAt) {
@@ -400,12 +495,9 @@ function boardState(m) {
   let pending = null;
   if (S.pending) {
     const from = ix.termPos(S.pending.from);
-    if (from) pending = { from, to: [snap(S.pending.to[0]), snap(S.pending.to[1])], bend: bendFor(S.circuit, S.pending.from, S.pending.to) };
+    if (from) pending = { from, to: [snap(S.pending.to[0]), snap(S.pending.to[1])], bend: bendFor(circuit, S.pending.from, S.pending.to) };
   }
-  return {
-    circuit: S.circuit, sel: S.sel, highlight: S.highlight, result: m.result, overlay: S.overlay,
-    probes, ghost, pending, target: S.probeDrag && S.probeDrag.target ? S.probeDrag.target.point : null,
-  };
+  return { ...base, sel: S.sel, probes, ghost, pending, target: S.probeDrag && S.probeDrag.target ? S.probeDrag.target.point : null };
 }
 
 /* ================================================================ view: panels */
@@ -415,7 +507,15 @@ function render() {
   const m = measureNow();
   S.last = m;
   setViewBox();
-  svg().innerHTML = `<rect class="board-bg" x="-5000" y="-5000" width="10000" height="10000" fill="url(#grid)"/>${renderBoard(boardState(m))}`;
+  $('board').innerHTML = `<rect class="board-bg" x="-5000" y="-5000" width="10000" height="10000" fill="url(#grid)"/>${renderBoard(boardState(m, []))}`;
+  const open = S.path.length > 0;
+  $('subwin').hidden = !open;
+  $('boardWrap').classList.toggle('dim', open);
+  document.body.classList.toggle('in-block', open);
+  if (open) {
+    $('subBoard').innerHTML = `<rect class="board-bg" x="-5000" y="-5000" width="10000" height="10000" fill="url(#grid2)"/>${renderBoard(boardState(m, S.path))}`;
+    renderSubwin(m);
+  }
   $('emptyHint').hidden = S.circuit.components.length > 0;
   renderToolbar();
   renderPalette();
@@ -447,7 +547,7 @@ function paletteIcon(p) {
   return `<svg viewBox="-46 -46 92 92" class="sym">${SHAPES[p.type].draw(c)}</svg>`;
 }
 function renderPalette() {
-  $('palette').innerHTML = PALETTE.map((p) => `<button class="tool ${S.tool === p.key ? 'on' : ''}" data-tool="${p.key}"
+  $('palette').innerHTML = PALETTE.filter((p) => !S.path.length || IN_BLOCK.has(p.key)).map((p) => `<button class="tool ${S.tool === p.key ? 'on' : ''}" data-tool="${p.key}"
     aria-pressed="${S.tool === p.key}" title="${esc(p.hint || `Place a ${p.label.toLowerCase()}`)}">${paletteIcon(p)}<span>${esc(p.label)}</span></button>`).join('');
 }
 
@@ -459,6 +559,7 @@ function renderStatus() {
   else if (S.pending) text = 'Click a pin or a wire to connect. Click empty board for a corner. Esc to stop.';
   else if (S.tool === 'wire') text = 'Click a pin, a wire, or the board to start a wire.';
   else if (S.sel) text = 'Drag to move. R rotates, Delete removes. Drag from a pin to wire it.';
+  else if (S.path.length) text = `Build ${S.path.at(-1)} between A and B. Drag from a pin to wire it. Esc closes the window.`;
   else text = 'Click a part to set its value. Drag from any pin to draw a wire. Drag the board to pan; scroll to zoom.';
   $('status').textContent = text;
 }
@@ -471,6 +572,8 @@ function field(label, param, value, opts = {}) {
       autocomplete="off" spellcheck="false" inputmode="text">${opts.help ? `<small>${esc(opts.help)}</small>` : ''}</label>`;
 }
 
+const RESULT_LOCKED = '<p class="help lockmsg">Live I and V for this part unlock once you check this block\'s Req.</p>';
+
 function liveRows(rows) {
   return `<dl class="live">${rows.map(([k, v, cls]) => `<div class="${cls || ''}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
 }
@@ -478,15 +581,17 @@ function liveRows(rows) {
 function renderInspector(m) {
   const el = $('inspector');
   const item = findSel();
-  const r = m.result;
+  const r = scoped(m.result, pre());
+  const locked = lockedAt();
   el.hidden = !item;
   if (!item) { el.innerHTML = ''; return; }
   const close = '<button class="close" data-act="deselect" aria-label="Close">×</button>';
   if (S.sel.kind === 'wire') {
     const wr = r.ok ? r.wires[item.id] : null;
     el.innerHTML = `<div class="card-head"><span class="label">Selected</span>${close}<h2>${esc(item.id)} · Wire</h2></div>
-      ${wr && !wr.cut ? liveRows([['Node', esc(wr.node)], ['Voltage', esc(short(r.nodes.find((n) => n.name === wr.node)?.v ?? 0, 'V'))],
-        ['Current', esc(short(Math.abs(wr.i), 'A'))]]) : ''}
+      ${wr && !wr.cut && locked ? RESULT_LOCKED : ''}
+      ${wr && !wr.cut && !locked ? liveRows([['Node', esc(wr.node)], ['Voltage', esc(short(r.nodes.find((n) => n.name === wr.node)?.v ?? 0, 'V')), 'q-v'],
+        ['Current', esc(short(Math.abs(wr.i), 'A')), 'q-i']]) : ''}
       ${item.cut ? '<p class="help">This wire is cut. Put the probes on the two ends to measure the current that would flow through it.</p>'
         : '<p class="help">To measure current, cut this wire and put the meter in the gap.</p>'}
       <div class="row-btns">
@@ -496,7 +601,7 @@ function renderInspector(m) {
       </div>`;
     return;
   }
-  const c = item, p = c.params, cr = r.ok ? r.components[c.id] : null;
+  const c = item, p = c.params, cr = r.ok && !locked ? r.components[c.id] : null;
   let body = '';
   if (c.type === 'resistor') {
     const series = S.series === 'E24' ? E24 : E12;
@@ -521,8 +626,18 @@ function renderInspector(m) {
         <rect class="body" x="22" y="3" width="76" height="20" rx="9"/>${bands.colors.map((col, i, a) => `<rect x="${
         i === a.length - 1 ? 84 : 32 + i * 10}" y="3" width="5" height="20" fill="${col}"/>`).join('')}</svg>
         <span>${esc(bands.names.join(' · '))}</span></div>` : ''}
-      ${cr ? liveRows([['Voltage across', esc(short(Math.abs(cr.v), 'V'))], ['Current through', esc(short(Math.abs(cr.i), 'A'))],
+      ${locked ? RESULT_LOCKED : ''}
+      ${cr ? liveRows([['Voltage drop', esc(short(Math.abs(cr.v), 'V')), 'q-v'], ['Current through', esc(short(Math.abs(cr.i), 'A')), 'q-i'],
         ['Power', `${esc(short(cr.p, 'W'))} <small>(${pct < 1 ? '<1' : Math.round(pct)}% of rating)</small>`, pct > 100 ? 'bad' : pct > 50 ? 'warm' : '']]) : ''}`;
+  } else if (c.type === 'reqblock') {
+    const solved = isSolved(c);
+    const R = equivalentR(c.inner).R;
+    body = solved
+      ? liveRows([['Req', esc(R === Infinity ? 'open' : short(R, 'Ω')), 'q-r'],
+        ...(cr ? [['Voltage drop', esc(short(Math.abs(cr.v), 'V')), 'q-v'], ['Current through', esc(short(Math.abs(cr.i), 'A')), 'q-i']] : [])])
+      : '<p class="help">Req = ? Open the block, build its inside between A and B, then check your Req. Its I and V show here once it checks out.</p>';
+    body += `<div class="row-btns"><button class="btn primary" data-act="open-block">Open</button>
+      <button class="btn" data-act="expand" aria-pressed="${!!c.expanded}">${c.expanded ? 'Hide inside' : 'Show inside on board'}</button></div>`;
   } else if (c.type === 'vsource') {
     const battery = c.style === 'battery';
     const ex = cr && cr.extra;
@@ -533,39 +648,126 @@ function renderInspector(m) {
         help: 'Leave empty for no limit. A bench supply drops into CC mode at this current.' })}
       ${field('Internal resistance', 'r', short(p.r, 'Ω'), { unit: 'Ω', help: battery ? 'A 9 V alkaline is around 1–2 Ω; a car battery is about 0.01 Ω.' : '' })}
       ${ex ? liveRows([['Mode', `<span class="lamp ${ex.mode === 'CC' ? 'amber' : 'go'}"></span> ${ex.mode === 'CC' ? 'CC (current limit)' : 'CV'}`],
-        ['Output', esc(short(ex.terminalVoltage, 'V'))], ['Current', esc(short(ex.supplyCurrent, 'A'))], ['Power out', esc(short(ex.delivered, 'W'))]]) : ''}`;
+        ['Output', esc(short(ex.terminalVoltage, 'V')), 'q-v'], ['Current', esc(short(ex.supplyCurrent, 'A')), 'q-i'], ['Power out', esc(short(ex.delivered, 'W'))]]) : ''}`;
   } else if (c.type === 'switch') {
     body = `<div class="row-btns"><button class="btn primary" data-act="toggle">${p.closed ? 'Open the switch' : 'Close the switch'}</button></div>
       <p class="help">It's ${p.closed ? 'closed (conducting)' : 'open (no connection)'}. Double-click it on the board to flip it.</p>
       ${cr && p.closed ? liveRows([['Current through', esc(short(Math.abs(cr.i), 'A'))]]) : ''}`;
   } else if (c.type === 'ground') {
     body = '<p class="help">Ground is 0 V. Every voltage is measured from here.</p>';
+  } else if (c.port) {
+    body = `<p class="help">Port ${esc(c.id)} is where ${esc(S.path.at(-1))} meets the rest of the circuit. Wire the inside between A and B. Drag it to move.</p>`;
   } else if (c.type === 'junction') {
     body = `<p class="help">A connection point. Drag it to move; wires follow.</p>${cr ? '' : ''}`;
   }
-  const label = { resistor: 'Resistor', vsource: c.style === 'battery' ? 'Battery' : 'DC supply', isource: 'Current source',
-    switch: 'Switch', ground: 'Ground', junction: 'Junction' }[c.type];
+  const label = c.port ? 'Port' : { resistor: 'Resistor', vsource: c.style === 'battery' ? 'Battery' : 'DC supply', isource: 'Current source',
+    switch: 'Switch', ground: 'Ground', junction: 'Junction', reqblock: 'Req block' }[c.type];
   el.innerHTML = `<div class="card-head"><span class="label">Selected</span>${close}<h2>${esc(c.id)} · ${esc(label)}</h2></div>
     ${body}
-    <div class="row-btns">${c.type === 'junction' ? '' : '<button class="btn" data-act="rotate">Rotate (R)</button>'}
-      <button class="link danger" data-act="delete">Delete</button></div>`;
+    ${c.port ? '' : `<div class="row-btns">${c.type === 'junction' ? '' : '<button class="btn" data-act="rotate">Rotate (R)</button>'}
+      <button class="link danger" data-act="delete">Delete</button></div>`}`;
+}
+
+/* ------------------------------------------------------------ Req window */
+
+function renderSubwin(m) {
+  const blk = blockAt(S.circuit, S.path);
+  if (!blk) return;
+  const gid = S.path.join('/');
+  $('swCrumbs').innerHTML = `<button class="crumb" data-act="crumb" data-depth="0">Main board</button>${S.path.map((id, k) => `<span class="sep">›</span>${
+    k === S.path.length - 1 ? `<b>${esc(id)}</b>` : `<button class="crumb" data-act="crumb" data-depth="${k + 1}">${esc(id)}</button>`}`).join('')}`;
+  const eq = equivalentR(blk.inner);
+  const solved = isSolved(blk);
+  const msg = S.reqMsg && S.reqMsg.id === gid ? S.reqMsg : null;
+  let html = `<div class="card-head"><span class="label">Req check</span><h2>${esc(blk.id)} = <span class="${solved ? 'q-r' : 'q'}">${
+    solved ? esc(eq.R === Infinity ? 'open' : short(eq.R, 'Ω')) : '?'}</span></h2></div>`;
+  if (eq.R === null) {
+    html += `<p class="help">Fix the problem inside first: ${esc(eq.reason || 'it can’t be solved.')}</p>`;
+  } else if (eq.R === Infinity && !solved) {
+    html += '<p class="help">A and B aren’t connected yet. Wire resistors from A to B, using the parts on the left.</p>';
+  } else if (!solved) {
+    const draft = S.drafts[gid] ?? '';
+    html += `<p class="help">Work out the resistance between A and B, then type it in.</p>
+      <label class="field"><span>Your Req</span><input class="num" data-guess value="${esc(draft)}" placeholder="e.g. 92.6 or 4.7k"
+        autocomplete="off" spellcheck="false"></label>
+      <div class="row-btns"><button class="btn primary" data-act="req-check">Check</button>
+        <button class="link" data-act="req-show">Show me</button></div>
+      ${msg && !msg.ok ? `<div class="verdict ${msg.close ? 'amber' : 'stop'}"><span class="lamp ${msg.close ? 'amber' : 'stop'}"></span><div><b>${
+        msg.close ? 'Close' : 'Not yet'}</b><p>${esc(msg.text)}</p></div></div>` : ''}
+      <p class="help small">The meter works in here. Each part’s I and V unlock once your Req checks out.</p>`;
+  } else {
+    const how = blk.check.how === 'shown' ? 'Shown, not checked.' : 'Checked.';
+    html += `<p class="okline"><span class="lamp go"></span> ${how} Change a value inside and it locks again, so you can predict the new Req.</p>`;
+    html += checksHTML(blockChecks(S.circuit, S.path, m.result), blk.id);
+  }
+  const side = $('swSide');
+  if (side.dataset.html !== html) { side.innerHTML = html; side.dataset.html = html; }
+}
+
+function checksHTML(k, name) {
+  if (!k) return '<p class="help">Fix the circuit problems listed under Circuit check to see the live values.</p>';
+  const A = (x) => `<span class="q-i">${esc(short(Math.abs(x), 'A'))}</span>`;
+  const V = (x) => `<span class="q-v">${esc(short(Math.abs(x), 'V'))}</span>`;
+  const same = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(Math.abs(a), Math.abs(b)) + 1e-12;
+  const sum = (terms, f, key) => terms.map((t, j) => `${j ? (t[key] < 0 ? ' − ' : ' + ') : t[key] < 0 ? '− ' : ''}${f(t[key])}<small>${esc(t.id)}</small>`).join('');
+  let h = liveRows([[`Drop across ${name}`, V(k.block.v), 'q-v'], [`Through ${name}`, A(k.block.i), 'q-i']]);
+  if (Math.abs(k.block.i) < 1e-12) h += `<p class="help small">No current flows through ${esc(name)} right now. Connect it to a supply on the main board to see the checks fill in.</p>`;
+  h += '<h3 class="eq-h">Current (KCL)</h3>';
+  for (const line of k.kcl) {
+    if (!line.terms.length) continue;
+    h += `<div class="eq">At ${line.at}: ${sum(line.terms, A, 'i')} = ${A(line.total)} ${same(line.total, k.block.i)
+      ? `<span class="okmark">✓ matches the current through ${esc(name)}</span>` : ''}</div>`;
+  }
+  if (k.kvl.length) {
+    h += '<h3 class="eq-h">Voltage drops (KVL), each path A → B</h3>';
+    for (const line of k.kvl) {
+      h += `<div class="eq">${sum(line.terms, V, 'v')} = ${V(line.total)} ${same(line.total, k.vab) ? `<span class="okmark">✓ matches the drop across ${esc(name)}</span>` : ''}</div>`;
+    }
+  }
+  return h;
+}
+
+function openBlock(id) {
+  const c = comp(id);
+  if (!c || c.type !== 'reqblock') return;
+  if (S.pending) cancelWire();
+  if (!c.inner) c.inner = emptyInner();
+  S.viewStack.push(S.view);
+  S.path = [...S.path, id];
+  S.view = { x: -60, y: -40, scale: 1 };
+  Object.assign(S, { sel: null, tool: 'select', armed: null, ghostAt: null, highlight: new Set() });
+  render();
+  fit();
+  render();
+}
+
+/** Close open blocks down to `depth` (0 = back to the main board), selecting the block just closed. */
+function closeTo(depth, { quiet = false } = {}) {
+  if (S.path.length <= depth) return;
+  if (S.pending) cancelWire();
+  let last = null;
+  while (S.path.length > depth) { last = S.path.pop(); S.view = S.viewStack.pop() || S.view; }
+  Object.assign(S, { sel: quiet ? null : { kind: 'comp', id: last }, tool: 'select', armed: null, ghostAt: null });
+  if (!quiet) { setViewBox(); render(); }
 }
 
 /* -------------------------------------------------------------- meter */
 
 function attLabel(att) {
   if (!att) return null;
-  const term = attachTerm(S.circuit, att);
+  const term = globalAttachTerm(S.circuit, att);
   const node = S.last && S.last.base.ok ? S.last.base.nodeName(term) : null;
   if (att.kind === 'pin') {
     const [id, pin] = att.term.split('.');
-    const c = comp(id);
+    const f = findGlobal(S.circuit, id);
+    const c = f && f.item;
     const pinName = c && (c.type === 'vsource' || c.type === 'isource') ? (pin === 'p' ? '+' : '−')
       : c && c.type === 'junction' ? '' : c && c.type === 'ground' ? '' : ` pin ${pin}`;
-    return `${id}${pinName ? ` ${pinName}` : ''}${node ? ` · ${node}` : ''}`;
+    return `${pretty(c && c.port ? `${id} port` : id)}${pinName && !(c && c.port) ? ` ${pinName}` : ''}${node ? ` · ${node}` : ''}`;
   }
-  const w = wire(att.id);
-  return `${att.id}${w && w.cut ? ` (cut, ${att.t > 0.5 ? 'right' : 'left'} end)` : ''}${node ? ` · ${node}` : ''}`;
+  const fw = findGlobal(S.circuit, att.id);
+  const w = fw && fw.item;
+  return `${pretty(att.id)}${w && w.cut ? ` (cut, ${att.t > 0.5 ? 'right' : 'left'} end)` : ''}${node ? ` · ${node}` : ''}`;
 }
 
 function renderMeter(m) {
@@ -622,7 +824,7 @@ function renderIssues(m) {
   const lvl = (l) => (l === 'error' ? 'stop' : l === 'warning' ? 'amber' : 'go');
   el.innerHTML = `<div class="card-head"><span class="label">Circuit check</span></div>
     ${list.length ? list.map((i) => `<button class="issue ${i.level}" data-ids="${esc((i.ids || []).join(','))}">
-      <span class="lamp ${lvl(i.level)}"></span><span>${esc(i.message)}</span></button>`).join('')
+      <span class="lamp ${lvl(i.level)}"></span><span>${esc(i.message.replace(/\b((?:Req\d+\/)+)/g, (x) => x.replace(/\//g, ' › ')))}</span></button>`).join('')
     : '<p class="ok"><span class="lamp go"></span> No problems found.</p>'}`;
 }
 
@@ -633,26 +835,35 @@ function showTip(e) {
   const hit = e.target.closest && e.target.closest('[data-hit]');
   const m = S.last;
   if (!hit || !m || !m.result.ok || S.probeDrag || S.pending) { tip.hidden = true; return; }
-  const r = m.result;
+  const r = scoped(m.result, pre());
+  const locked = lockedAt();
   let html = '';
   if (hit.dataset.hit === 'comp') {
     const c = comp(hit.dataset.id), cr = r.components[hit.dataset.id];
     if (!c || !cr || c.type === 'ground') { tip.hidden = true; return; }
-    html = `<b>${esc(c.id)}</b> ${esc(cr.type === 'resistor' ? short(c.params.R, 'Ω') : '')}<br>
-      ${esc(short(Math.abs(cr.v), 'V'))} across · ${esc(short(Math.abs(cr.i), 'A'))}${cr.type === 'resistor' ? ` · ${esc(short(cr.p, 'W'))}` : ''}`;
+    if (c.type === 'reqblock' && !isSolved(c)) html = `<b>${esc(c.id)}</b> Req = ?<br>Double-click to open it`;
+    else if (locked) html = `<b>${esc(c.id)}</b> <span class="t-r">${esc(c.type === 'resistor' ? short(c.params.R, 'Ω') : '')}</span><br>I and V unlock after the Req check`;
+    else {
+      const R = c.type === 'resistor' ? c.params.R : c.type === 'reqblock' ? equivalentR(c.inner).R : null;
+      html = `<b>${esc(c.id)}</b> <span class="t-r">${esc(R !== null ? short(R, 'Ω') : '')}</span><br>
+      <span class="t-v">${esc(short(Math.abs(cr.v), 'V'))}</span> drop · <span class="t-i">${esc(short(Math.abs(cr.i), 'A'))}</span>${
+  cr.type === 'resistor' ? ` · ${esc(short(cr.p, 'W'))}` : ''}`;
+    }
+  } else if (locked) {
+    tip.hidden = true; return;
   } else if (hit.dataset.hit === 'wire') {
     const wr = r.wires[hit.dataset.id];
     if (!wr) { tip.hidden = true; return; }
     if (wr.cut) html = `<b>${esc(wr.id)}</b> cut · ${esc(wr.ends.join(' | '))}`;
     else {
       const n = r.nodes.find((x) => x.name === wr.node);
-      html = `<b>${esc(wr.node)}</b> ${n && !n.floating ? esc(short(n.v, 'V')) : 'floating'}<br>${esc(short(Math.abs(wr.i), 'A'))} in ${esc(wr.id)}`;
+      html = `<b>${esc(wr.node)}</b> <span class="t-v">${n && !n.floating ? esc(short(n.v, 'V')) : 'floating'}</span><br><span class="t-i">${esc(short(Math.abs(wr.i), 'A'))}</span> in ${esc(wr.id)}`;
     }
   } else if (hit.dataset.hit === 'pin') {
     const name = r.nodeName(hit.dataset.term);
     const n = r.nodes.find((x) => x.name === name);
     if (!n) { tip.hidden = true; return; }
-    html = `<b>${esc(name)}</b> ${n.floating ? 'floating' : esc(short(n.v, 'V'))}`;
+    html = `<b>${esc(name)}</b> <span class="t-v">${n.floating ? 'floating' : esc(short(n.v, 'V'))}</span>`;
   } else { tip.hidden = true; return; }
   const box = $('boardWrap').getBoundingClientRect();
   tip.innerHTML = html;
@@ -691,7 +902,7 @@ function onBoardDown(e) {
   const movedFar = (ev) => Math.hypot(ev.clientX - start[0], ev.clientY - start[1]) > 5;
 
   if (S.armed) {
-    const t = findTarget(indexCircuit(S.circuit), S.circuit, p, { pinRadius: 22 / S.view.scale, wireRadius: 16 / S.view.scale });
+    const t = findTarget(indexCircuit(cur()), cur(), p, { pinRadius: 22 / S.view.scale, wireRadius: 16 / S.view.scale });
     const which = S.armed;
     S.armed = null;
     if (t) commit(() => { S.probes[which] = toAtt(t); });
@@ -741,6 +952,11 @@ function onBoardDown(e) {
   }
 
   if (hit.hit === 'comp') {
+    // Double-click, detected here: each click redraws the board, so the browser's own dblclick never fires.
+    const now = performance.now();
+    const again = S.lastDown && S.lastDown.id === hit.id && S.lastDown.depth === S.path.length && now - S.lastDown.t < 450;
+    S.lastDown = again ? null : { id: hit.id, depth: S.path.length, t: now };
+    if (again) { partDoubleClick(hit.id); return; }
     S.sel = { kind: 'comp', id: hit.id };
     S.highlight = new Set();
     const c = comp(hit.id);
@@ -781,6 +997,17 @@ function onBoardDown(e) {
   });
 }
 
+function partDoubleClick(id) {
+  const c = comp(id);
+  if (!c) return;
+  S.sel = { kind: 'comp', id };
+  if (c.type === 'switch') { act('toggle'); return; }
+  if (c.type === 'reqblock') { openBlock(c.id); return; }
+  render();
+  const input = $('inspector').querySelector('input.num');
+  if (input) { input.focus(); input.select(); }
+}
+
 function startProbeDrag(which, e) {
   const start = [e.clientX, e.clientY];
   S.probeDrag = { which, client: start, moved: false, target: null, overBoard: false, world: null };
@@ -794,7 +1021,7 @@ function startProbeDrag(which, e) {
       const r = svg().getBoundingClientRect();
       d.overBoard = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
       d.world = d.overBoard ? toWorld(ev) : null;
-      d.target = d.overBoard ? findTarget(indexCircuit(S.circuit), S.circuit, d.world, { pinRadius: 16 / S.view.scale, wireRadius: 12 / S.view.scale }) : null;
+      d.target = d.overBoard ? findTarget(indexCircuit(cur()), cur(), d.world, { pinRadius: 16 / S.view.scale, wireRadius: 12 / S.view.scale }) : null;
       render();
     },
     up() {
@@ -827,6 +1054,7 @@ function onKey(e) {
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod) return;
   if (e.key === 'Escape') {
+    if (S.path.length && !S.pending && !S.sel && !S.armed && S.tool === 'select') { closeTo(S.path.length - 1); return; }
     if (S.pending) cancelWire();
     S.tool = 'select'; S.ghostAt = null; S.armed = null; S.sel = null; S.highlight = new Set();
     render();
@@ -862,6 +1090,7 @@ function act(name, el) {
       return;
     case 'delete':
       if (!item) return;
+      if (item.port) { toast(`Ports A and B are ${S.path.at(-1)}'s two ends. They stay.`); return; }
       commit(() => { if (S.sel.kind === 'wire') removeWire(item.id); else removeComponent(item.id); S.sel = null; });
       return;
     case 'cut':
@@ -895,6 +1124,49 @@ function act(name, el) {
     case 'park':
       commit(() => { S.probes = { red: null, black: null }; });
       return;
+    case 'open-block':
+      if (item && item.type === 'reqblock') openBlock(item.id);
+      return;
+    case 'expand':
+      if (item && item.type === 'reqblock') commit(() => { if (item.expanded) delete item.expanded; else item.expanded = true; });
+      return;
+    case 'close-block':
+      closeTo(S.path.length - 1);
+      return;
+    case 'crumb':
+      closeTo(Number(el.dataset.depth));
+      return;
+    case 'sw-fit':
+      fit();
+      return;
+    case 'req-check': {
+      const blk = blockAt(S.circuit, S.path);
+      if (!blk) return;
+      const gid = S.path.join('/');
+      const input = $('swSide').querySelector('[data-guess]');
+      const raw = input ? input.value.trim() : '';
+      S.drafts[gid] = raw;
+      const g = parseEng(raw);
+      if (g === null || g < 0) { S.reqMsg = { id: gid, ok: false, text: 'Type a resistance like 92.6, 4.7k or 1M.' }; render(); return; }
+      const res = gradeGuess(blk.inner, g);
+      if (res.ok) {
+        S.reqMsg = { id: gid, ok: true };
+        delete S.drafts[gid];
+        commit(() => { blk.check = { R: equivalentR(blk.inner).R, how: 'checked' }; });
+        toast(`Correct: ${blk.id} = ${short(equivalentR(blk.inner).R, 'Ω')}. I and V are unlocked inside.`);
+      } else {
+        S.reqMsg = { id: gid, ok: false, close: !!res.close, text: res.hint };
+        render();
+      }
+      return;
+    }
+    case 'req-show': {
+      const blk = blockAt(S.circuit, S.path);
+      if (!blk) return;
+      S.reqMsg = null;
+      commit(() => { blk.check = { R: equivalentR(blk.inner).R, how: 'shown' }; });
+      return;
+    }
     default:
   }
   void el;
@@ -991,19 +1263,17 @@ async function boot() {
   const wantDemo = location.hash === '#demo';
   if (wantDemo) history.replaceState(null, '', location.pathname);
 
-  const board = svg();
-  board.addEventListener('pointerdown', onBoardDown);
-  board.addEventListener('pointermove', onBoardMove);
-  board.addEventListener('pointerleave', () => { $('tip').hidden = true; if (S.ghostAt) { S.ghostAt = null; render(); } });
-  board.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
-  board.addEventListener('dblclick', (e) => {
-    const hit = e.target.closest('[data-hit="comp"]');
-    if (!hit) return;
-    const c = comp(hit.dataset.id);
-    if (c && c.type === 'switch') { act('toggle'); return; }
-    const input = $('inspector').querySelector('input.num');
-    if (input) { input.focus(); input.select(); }
-  });
+  for (const board of [$('board'), $('subBoard')]) {
+    board.addEventListener('pointerdown', onBoardDown);
+    board.addEventListener('pointermove', onBoardMove);
+    board.addEventListener('pointerleave', () => { $('tip').hidden = true; if (S.ghostAt) { S.ghostAt = null; render(); } });
+    board.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+    new ResizeObserver(() => setViewBox()).observe(board);
+  }
+  $('swHead').addEventListener('click', onPanelClick);
+  $('swSide').addEventListener('click', onPanelClick);
+  $('swSide').addEventListener('input', (e) => { if (e.target.matches('[data-guess]')) S.drafts[S.path.join('/')] = e.target.value; });
+  $('swSide').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-guess]')) { e.preventDefault(); act('req-check'); } });
   $('palette').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
   for (const id of ['inspector', 'demoCard', 'meterCard', 'issues']) {
     $(id).addEventListener('click', onPanelClick);
@@ -1034,12 +1304,12 @@ async function boot() {
     if (S.circuit.components.length && !window.confirm('Replace the circuit on the board?')) return;
     if (v === 'demo') { startDemo(); return; }
     S.demo = null;
+    closeTo(0, { quiet: true });
     commit(() => { S.circuit = example(v); S.probes = { red: null, black: null }; S.sel = null; });
     fit();
     render();
   };
   window.addEventListener('keydown', onKey);
-  new ResizeObserver(() => setViewBox()).observe(board);
 
   if (wantDemo) { startDemo(); return; }
   render();

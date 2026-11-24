@@ -16,6 +16,16 @@ A DC circuit builder and multimeter safety trainer that runs entirely in the bro
 
 The circuit autosaves in the browser. **Share** copies a link that holds the whole circuit.
 
+**Req blocks** (the **Req block** tool) are for working series-parallel circuits by hand. A block sits on the board like one resistor (dashed outline, labelled `Req = ?`). Double-click it, or press **Open**, to open a window with its own small board between ports A and B; build any mix of resistors and further Req blocks in there. Close it and the block is one resistor in series again.
+
+- The student types the Req they calculated and presses **Check** (1% tolerance). A wrong answer gets a hint in words only, never the formula. **Show me** reveals it instead.
+- Until Req checks out, every part inside shows `I ?  V ?`. After it checks out, each part shows its current (green) and voltage (red), and the window lists the KCL lines at A and B and the KVL line for each path from A to B, each ticked when it balances.
+- Change anything inside and the block locks again, so the student can predict the new Req.
+- The meter's probes work inside a block. **Show inside on board** draws the block's inside in a bubble above it on the main board.
+- Colors across the bench: resistance blue, current green, voltage red. A resistor or block shows its name and resistance above it, and its current (with a direction arrow) over its voltage drop ΔV below it, so labels stay about as wide as the part. When another resistor sits right below (parallel rows), current and drop share one line instead. On the main board those show while **Show values** is on; inside a block they always show.
+
+Under the hood, `buildNetlist()` flattens each block before solving: inner parts become `Req1/R2`, and two hidden wires join `Req1.a` and `Req1.b` to the inner ports. `js/core/blocks.js` works out Req (a 1 A test source between A and B), grades guesses and builds the KCL/KVL lines; `tests/circuit/blocks.test.mjs` checks them against the hand calculation.
+
 **Teacher demo** (Examples menu, or `/tools/circuit/bench#demo`) loads one board and walks through eleven setups: voltage done right, reversed leads, current through a cut wire, an ammeter across a supply, the red lead left in mA, the wrong current jack, a resistor over its power rating, ohms on a live circuit, in-circuit ohms, and lifting a leg. The steps live in `js/demo.js`; `tests/circuit/demo.test.mjs` checks that each step's on-screen text matches what the engine actually shows.
 
 It's plain ES modules, with no build step and no dependencies. The model and solver code never touches the DOM, so it runs under Node.
@@ -39,6 +49,7 @@ js/core/netlist.js     circuit model, union-find node building, save/load
 js/core/mna.js         the MNA matrix, stamp helpers, Gaussian elimination with partial pivoting
 js/core/solver.js      solve(circuit, { freq }) → node voltages, part currents and power, issues
 js/core/share.js       circuit ↔ compressed URL hash
+js/core/blocks.js      Req blocks: scopes, Req, guess grading, KCL/KVL lines
 js/components/*.js     one file per part type
 js/components/registry.js   the list of part types
 js/meter/meter-model.js     puts the meter into the circuit as real parts and reads it

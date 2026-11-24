@@ -59,6 +59,38 @@ export function addWire(circuit, a, b, extra = {}) {
   return id;
 }
 
+/* ----------------------------------------------------------- Req blocks */
+
+/** A new Req block's inside: just its two ports, A on the left and B on the right. */
+export function emptyInner() {
+  return {
+    components: [
+      { id: 'A', type: 'junction', port: true, params: {}, layout: { x: 0, y: 120, rot: 0 } },
+      { id: 'B', type: 'junction', port: true, params: {}, layout: { x: 360, y: 120, rot: 0 } },
+    ],
+    wires: [],
+  };
+}
+
+/** Replace every Req block (at any depth) with its inner parts, renamed "Req1/R2", plus two
+    hidden wires from the block's pins to its ports. Returns the circuit with a `blocks` list
+    [{ id }] (global ids, outermost first). A circuit with no blocks comes back unchanged. */
+export function flattenBlocks(circuit) {
+  const list = circuit.components || [];
+  if (!list.some((c) => c && c.type === 'reqblock')) return circuit;
+  const components = [], wires = [...(circuit.wires || [])], blocks = [];
+  for (const c of list) {
+    if (!c || c.type !== 'reqblock') { components.push(c); continue; }
+    const inner = flattenBlocks(c.inner || emptyInner());
+    const P = `${c.id}/`;
+    for (const ic of inner.components || []) components.push({ ...ic, id: P + ic.id });
+    for (const iw of inner.wires || []) wires.push({ ...iw, id: P + iw.id, a: P + iw.a, b: P + iw.b });
+    wires.push({ id: `${P}~a`, a: `${c.id}.a`, b: `${P}A.j`, hidden: true }, { id: `${P}~b`, a: `${c.id}.b`, b: `${P}B.j`, hidden: true });
+    blocks.push({ id: c.id }, ...(inner.blocks || []).map((b) => ({ id: P + b.id })));
+  }
+  return { ...circuit, components, wires, blocks };
+}
+
 /* ------------------------------------------------------------ save / load */
 
 export function serialize(circuit) {
@@ -103,6 +135,7 @@ const issue = (level, code, message, ids = []) => ({ level, code, message, ids }
  *   cutWires: [{ id, a, b }], the terminals on each side of a cut
  */
 export function buildNetlist(circuit, registry) {
+  circuit = flattenBlocks(circuit);
   const issues = [];
   const uf = new UnionFind();
   const order = [];                       // terminals in first-seen order, for stable node names
@@ -203,5 +236,5 @@ export function buildNetlist(circuit, registry) {
   let k = 1;
   for (const n of nodes) n.name = n.index === ground ? 'GND' : `N${k++}`;
 
-  return { comps, nodes, ground, groundAuto, groundNote, edges, cutWires, nodeOf, canon, issues };
+  return { comps, nodes, ground, groundAuto, groundNote, edges, cutWires, nodeOf, canon, issues, blocks: circuit.blocks || [] };
 }

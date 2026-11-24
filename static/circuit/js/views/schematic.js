@@ -129,9 +129,26 @@ export function renderBoard(s) {
     out.push(partSVG(c, {
       sel: sel.kind === 'comp' && sel.id === c.id,
       hl: hl.has(c.id),
+      info: s.blockInfo && s.blockInfo.get(c.id),
+      vals: s.values ? s.values.get(c.id) : undefined,
+      oneLine: s.values ? partBelow(c, circuit.components) : false,
     }));
   }
   out.push('</g>');
+
+  // Req blocks shown open on the board: their inside, drawn small in a bubble above the block
+  if (s.bubble) {
+    for (const c of circuit.components) {
+      if (c.type !== 'reqblock' || !c.expanded) continue;
+      const g = bubbleGeom(c);
+      const lead = g.lines.map(([x0, y0, x1, y1]) => `M${r1(x0)} ${r1(y0)}L${r1(x1)} ${r1(y1)}`).join('');
+      out.push(`<g class="bubble ${sel.kind === 'comp' && sel.id === c.id ? 'sel' : ''}" data-hit="comp" data-id="${esc(c.id)}">
+        <path class="bubble-lead" d="${lead}"/>
+        <rect class="bubble-bg" x="${r1(g.left)}" y="${r1(g.top)}" width="${r1(g.W)}" height="${r1(g.H)}" rx="10"/>
+        <g class="bubble-inner" transform="translate(${r1(g.left - g.ib.x0 * g.k)} ${r1(g.top - g.ib.y0 * g.k)}) scale(${g.k})">${s.bubble(c)}</g>
+      </g>`);
+    }
+  }
 
   // connection dots: junctions, and pins where 3+ things meet
   out.push('<g class="dots">');
@@ -140,7 +157,10 @@ export function renderBoard(s) {
       const term = `${c.id}.${pin}`;
       const n = (ix.wiresAt.get(term) || 0) + (c.type === 'junction' ? 0 : 1);
       const [x, y] = pinPos(c, pin);
-      if (c.type === 'junction') {
+      if (c.port) {
+        out.push(`<g class="port ${sel.kind === 'comp' && sel.id === c.id ? 'sel' : ''}"><circle cx="${x}" cy="${y}" r="7"/>
+          <text class="port-name" x="${c.id === 'B' ? x + 13 : x - 13}" y="${y + 5}" text-anchor="${c.id === 'B' ? 'start' : 'end'}">${esc(c.id)}</text></g>`);
+      } else if (c.type === 'junction') {
         const cls = ['junction', n >= 3 ? 'tee' : '', sel.kind === 'comp' && sel.id === c.id ? 'sel' : '', n === 0 ? 'lonely' : ''].join(' ');
         out.push(`<circle class="${cls}" cx="${x}" cy="${y}" r="${n >= 3 ? 4.5 : 3}"/>`);
       } else if (n >= 3) out.push(`<circle class="tee" cx="${x}" cy="${y}" r="4.5"/>`);
@@ -169,7 +189,7 @@ export function renderBoard(s) {
     if (!p || !p.point) continue;
     const [x, y] = p.point;
     const dx = which === 'red' ? 1 : -1;
-    out.push(`<g class="probe ${which} ${p.dragging ? 'dragging' : ''} ${p.loose ? 'loose' : ''}" data-hit="probe" data-probe="${which}"
+    out.push(`<g class="probe ${which} ${p.dragging ? 'dragging' : ''} ${p.loose ? 'loose' : ''} ${p.inside ? 'inside' : ''}" data-hit="probe" data-probe="${which}"
         transform="translate(${r1(x)} ${r1(y)})">
       <path class="probe-cord" d="M${dx * 30} -44C${dx * 50} -70 ${dx * 70} -70 ${dx * 90} -80"/>
       <path class="probe-body" d="M${dx * 6} -8L${dx * 30} -44"/>
@@ -190,48 +210,111 @@ export function renderBoard(s) {
   return out.join('');
 }
 
-function partSVG(c, { sel, hl }) {
+/** A Req block's value label: its Req once the student has checked it, else "Req = ?". */
+function blockLabel(info) {
+  if (!info || !info.solved) return { text: 'Req = ?', cls: 'q' };
+  if (info.R === Infinity) return { text: 'open', cls: 'r' };
+  return { text: short(info.R, 'Ω'), cls: 'r' };
+}
+
+const VALUED = new Set(['resistor', 'reqblock']);
+
+/** Which way conventional current flows through a two-pin part on screen. */
+function arrowFor(c, i) {
+  const pins = Object.keys(shapeOf(c.type).pins);
+  const a = pinPos(c, pins[0]), b = pinPos(c, pins[1]);
+  let dx = b[0] - a[0], dy = b[1] - a[1];
+  if (i < 0) { dx = -dx; dy = -dy; }
+  return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? '→' : '←') : (dy > 0 ? '↓' : '↑');
+}
+
+/** Labels for resistors and Req blocks: the name and resistance together on one line, then the
+    current and the voltage DROP across the part, spaced apart on their own line(s).
+    vals: undefined (no live values), 'locked' (shown as ?), or { i, v } from the solve. */
+/** Is another resistor or block right under this horizontal one (parallel rows)? Then its current
+    and drop go on one short line instead of two, to leave room for that part's name. */
+function partBelow(c, comps) {
+  if (!VALUED.has(c.type) || (c.layout.rot || 0) % 2) return false;
+  return comps.some((o) => o !== c && VALUED.has(o.type) && !((o.layout.rot || 0) % 2)
+    && Math.abs(o.layout.x - c.layout.x) < 100 && o.layout.y > c.layout.y && o.layout.y - c.layout.y < 110);
+}
+
+function valuedLabels(c, val, vals, oneLine) {
+  const { x, y, rot = 0 } = c.layout;
+  const vertical = rot % 2 === 1;
+  const head = `<tspan class="pname">${esc(c.id)}</tspan><tspan class="pval ${val.cls}" dx="9">${esc(val.text)}</tspan>`;
+  let I = '', V = '';
+  if (vals === 'locked') {
+    I = '<tspan class="q">I ?</tspan>';
+    V = '<tspan class="q">ΔV ?</tspan>';
+  } else if (vals) {
+    I = Math.abs(vals.i) < 1e-12 ? '<tspan class="iv-i">0 A</tspan>'
+      : `<tspan class="iv-i">${arrowFor(c, vals.i)} ${esc(short(Math.abs(vals.i), 'A'))}</tspan>`;
+    V = `<tspan class="tag">ΔV</tspan><tspan class="iv-v" dx="5">${esc(short(Math.abs(vals.v), 'V'))}</tspan>`;
+  }
+  const box = c.type === 'reqblock' ? 5 : 0;    // a block's dashed outline needs a little more room
+  // Horizontal: current over drop, centred under the part, so the labels stay about as wide as the
+  // part itself and don't run into neighbours in a series row.
+  if (!vertical && oneLine) {
+    return `<text class="plabel" x="${x}" y="${y - 22 - box}" text-anchor="middle">${head}</text>${I ? `
+      <text class="pvals" x="${x - 7}" y="${y + 27 + box}" text-anchor="end">${I}</text>
+      <text class="pvals" x="${x + 7}" y="${y + 27 + box}" text-anchor="start">${V}</text>` : ''}`;
+  }
+  if (!vertical) {
+    return `<text class="plabel" x="${x}" y="${y - 22 - box}" text-anchor="middle">${head}</text>${I ? `
+      <text class="pvals" x="${x}" y="${y + 26 + box}" text-anchor="middle">${I}</text>
+      <text class="pvals" x="${x}" y="${y + 41 + box}" text-anchor="middle">${V}</text>` : ''}`;
+  }
+  const lx = x + 24 + box;
+  if (!I) return `<text class="plabel" x="${lx}" y="${y + 5}">${head}</text>`;
+  return `<text class="plabel" x="${lx}" y="${y - 15}">${head}</text>
+    <text class="pvals" x="${lx}" y="${y + 5}">${I}</text>
+    <text class="pvals" x="${lx}" y="${y + 23}">${V}</text>`;
+}
+
+function partSVG(c, { sel, hl, info, vals, oneLine }) {
   const s = shapeOf(c.type);
   const { x, y, rot = 0 } = c.layout;
   const [hx, hy, hw, hh] = s.hit;
   const lab = labelSpots(c);
   const showLabels = c.type !== 'ground' && c.type !== 'junction';
   const cls = ['part', `t-${c.type}`, sel ? 'sel' : '', hl ? 'hl' : '', c.style ? `s-${c.style}` : ''].join(' ');
+  const val = c.type === 'reqblock' ? blockLabel(info) : { text: valueLabel(c), cls: c.type === 'resistor' ? 'r' : '' };
   return `<g class="${cls}" data-hit="comp" data-id="${esc(c.id)}">
     <g transform="translate(${x} ${y}) rotate(${rot * 90})">
       <rect class="part-hit" x="${hx - 4}" y="${hy - 4}" width="${hw + 8}" height="${hh + 8}" rx="6"/>
       ${s.draw(c)}
     </g>
-    ${showLabels ? `<text class="pname" x="${lab.name[0]}" y="${lab.name[1]}" text-anchor="${lab.name[2]}">${esc(c.id)}</text>
-    <text class="pval" x="${lab.value[0]}" y="${lab.value[1]}" text-anchor="${lab.value[2]}">${esc(valueLabel(c))}</text>` : ''}
+    ${VALUED.has(c.type) ? valuedLabels(c, val, vals, oneLine) : showLabels ? `<text class="pname" x="${lab.name[0]}" y="${lab.name[1]}" text-anchor="${lab.name[2]}">${esc(c.id)}</text>
+    <text class="pval ${val.cls}" x="${lab.value[0]}" y="${lab.value[1]}" text-anchor="${lab.value[2]}">${esc(val.text)}</text>` : ''}
   </g>`;
+}
+
+/* An expanded Req block's bubble: where it sits and how much its inside is scaled down. */
+export const BUBBLE_SCALE = 0.55;
+export function bubbleGeom(c) {
+  const ib = bounds(c.inner || { components: [], wires: [] }) || { x0: -40, y0: 40, x1: 400, y1: 200 };
+  const k = BUBBLE_SCALE, W = (ib.x1 - ib.x0) * k, H = (ib.y1 - ib.y0) * k;
+  const { x, y, rot = 0 } = c.layout;
+  if (rot % 2 === 1) {
+    const left = x - 50 - W, top = y - H / 2;
+    return { left, top, W, H, k, ib, lines: [[x - 17, y - 33, left + W, top + 8], [x - 17, y + 33, left + W, top + H - 8]] };
+  }
+  const left = x - W / 2, top = y - 48 - H;
+  return { left, top, W, H, k, ib, lines: [[x - 33, y - 17, left + 8, top + H], [x + 33, y - 17, left + W - 8, top + H]] };
 }
 
 function overlaySVG(circuit, ix, result) {
   const out = ['<g class="overlay">'];
-  // node voltages, one chip per node at its first visible pin
-  for (const n of result.nodes) {
-    if (n.floating || n.name === 'GND') continue;
-    const term = n.terminals.find((t) => !t.startsWith('~') && ix.termPos(t));
-    if (!term) continue;
-    const [x, y] = ix.termPos(term);
-    const text = short(n.v, 'V');
-    const w = text.length * 7 + 10;
-    out.push(`<g class="vchip" transform="translate(${x + 8} ${y - 24})"><rect width="${w}" height="17" rx="5"/>
-      <text x="${w / 2}" y="12.5" text-anchor="middle">${esc(text)}</text></g>`);
-  }
-  // branch currents with an arrow for direction
+  // Current through the other two-pin parts (supplies, switches). Resistors and blocks carry their
+  // own current and voltage-drop labels (see valuedLabels), so nothing here sits on a resistor's pin.
   for (const c of circuit.components) {
     const r = result.components[c.id];
     const pins = Object.keys(shapeOf(c.type).pins);
-    if (!r || pins.length !== 2 || Math.abs(r.i) < 1e-12) continue;
-    const a = pinPos(c, pins[0]), b = pinPos(c, pins[1]);
-    let dx = b[0] - a[0], dy = b[1] - a[1];
-    if (r.i < 0) { dx = -dx; dy = -dy; }
-    const arrow = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? '→' : '←') : (dy > 0 ? '↓' : '↑');
+    if (!r || pins.length !== 2 || VALUED.has(c.type) || Math.abs(r.i) < 1e-12) continue;
     const lab = labelSpots(c);
     const [x, y, anchor] = lab.value;
-    out.push(`<text class="amp" x="${x}" y="${y + 16}" text-anchor="${anchor}">${arrow} ${esc(short(Math.abs(r.i), 'A'))}</text>`);
+    out.push(`<text class="amp" x="${x}" y="${y + 16}" text-anchor="${anchor}">${arrowFor(c, r.i)} ${esc(short(Math.abs(r.i), 'A'))}</text>`);
   }
   out.push('</g>');
   return out.join('');
@@ -249,6 +332,14 @@ export function bounds(circuit) {
     for (const pin of Object.values(shapeOf(c.type).pins)) {
       const [dx, dy] = rotate(pin, c.layout.rot);
       xs.push(c.layout.x + dx); ys.push(c.layout.y + dy);
+    }
+    if (VALUED.has(c.type)) {   // room for the name, value, current and drop labels
+      if ((c.layout.rot || 0) % 2 === 1) xs.push(c.layout.x + 140);
+      else { xs.push(c.layout.x - 60, c.layout.x + 60); ys.push(c.layout.y + 50); }
+    }
+    if (c.type === 'reqblock' && c.expanded) {
+      const g = bubbleGeom(c);
+      xs.push(g.left, g.left + g.W); ys.push(g.top, g.top + g.H);
     }
   }
   if (!xs.length) return null;

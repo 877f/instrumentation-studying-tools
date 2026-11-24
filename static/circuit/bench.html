@@ -20,7 +20,7 @@
     <div class="tb-actions">
       <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
       <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
-      <button class="tbtn" id="overlayBtn" aria-pressed="false" title="Show every node voltage and current">Show values</button>
+      <button class="tbtn" id="overlayBtn" aria-pressed="false" title="Show each part's current and voltage drop">Show values</button>
       <select class="tbtn" id="examples" aria-label="Load an example">
         <option value="">Examples…</option>
         <option value="demo">Teacher demo (meter mistakes tour)</option>
@@ -51,6 +51,23 @@
           <button class="tbtn" id="fitBtn">Fit</button>
           <button class="tbtn" id="zoomIn" aria-label="Zoom in">+</button>
         </div>
+        <section class="subwin" id="subwin" hidden aria-label="Inside the Req block">
+          <header class="sw-head" id="swHead">
+            <nav class="crumbs" id="swCrumbs" aria-label="Open blocks"></nav>
+            <button class="tbtn" data-act="sw-fit">Fit</button>
+            <button class="close" data-act="close-block" aria-label="Close the block (Esc)" title="Close (Esc)">×</button>
+          </header>
+          <div class="sw-body">
+            <div class="sw-board">
+              <svg class="board" id="subBoard" role="application" aria-label="Inside the Req block">
+                <defs>
+                  <pattern id="grid2" width="20" height="20" patternUnits="userSpaceOnUse"><circle class="grid-dot" cx="0" cy="0" r="1.1"/></pattern>
+                </defs>
+              </svg>
+            </div>
+            <aside class="sw-side card" id="swSide" aria-live="polite"></aside>
+          </div>
+        </section>
         <div class="tip" id="tip" hidden></div>
       </div>
       <p class="status" id="status" aria-live="polite"></p>

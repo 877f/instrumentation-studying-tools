@@ -10,6 +10,11 @@ export const SHAPES = {
     pins: { a: [-40, 0], b: [40, 0] }, axis: 'x', hit: [-30, -14, 60, 28],
     draw: () => '<path class="ink" d="M-40 0H-24l4-8 8 16 8-16 8 16 8-16 8 16 4-8H40"/>',
   },
+  reqblock: {
+    pins: { a: [-40, 0], b: [40, 0] }, axis: 'x', hit: [-34, -18, 68, 36],
+    draw: () => '<rect class="req-box" x="-33" y="-17" width="66" height="34" rx="6"/>'
+      + '<path class="ink" d="M-40 0H-24l4-8 8 16 8-16 8 16 8-16 8 16 4-8H40"/>',
+  },
   vsource: {
     pins: { p: [0, -40], n: [0, 40] }, axis: 'y', hit: [-24, -24, 48, 48],
     draw: (c) => (c.style === 'battery'
