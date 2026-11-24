@@ -631,3 +631,21 @@ details.solution { margin-top: 14px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Circuit Bench card on the home screen */
+.bench-thumb .bt-trace { fill: none; stroke: var(--m-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.bench-thumb .bt-trace.thin { stroke-width: 1.8; }
+.bench-thumb .bt-part { fill: var(--m-face); stroke: var(--m-ink); stroke-width: 2.4; stroke-linejoin: round; }
+.bench-thumb .bt-dot { fill: var(--m-ink); }
+.bench-thumb .bt-red { fill: none; stroke: var(--pointer); stroke-width: 3; stroke-linecap: round; }
+.bench-thumb .bt-blk { fill: none; stroke: var(--m-ink); stroke-width: 3; stroke-linecap: round; }
+.bench-thumb .bt-body { fill: #f2b705; stroke: #10151a; stroke-width: 2.5; }
+.bench-thumb .bt-case { fill: #2d3339; }
+.bench-thumb .bt-lcd { fill: #b9c4a6; stroke: #10151a; stroke-width: 2; }
+.bench-thumb .bt-digits { font: 700 19px var(--f-mono); fill: #1c2216; }
+.bench-thumb .bt-knob { fill: #15191d; stroke: #4a545e; stroke-width: 2; }
+.bench-thumb .bt-pointer { stroke: #f2b705; stroke-width: 3.5; stroke-linecap: round; }
+.bench-thumb .bt-jack { fill: #0b0f13; stroke: #59636d; stroke-width: 2; }
+.bench-thumb .bt-jack.red { stroke: #c23324; }
+.bench-thumb .bt-safe { fill: var(--go); }
+.bench-thumb .bt-safe-text { font: 800 11px var(--f-label); letter-spacing: .16em; fill: #fff; }

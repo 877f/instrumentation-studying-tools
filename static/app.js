@@ -174,6 +174,29 @@ function chapterBay(c) {
       <span class="bay-go">${seen ? 'Keep practicing' : 'Start practicing'}</span></div></a>`;
 }
 
+/* Circuit Bench lives on its own page (/tools/circuit); this card is the way in from home. */
+function benchCard() {
+  const thumb = `<svg class="meter bench-thumb" viewBox="0 0 400 260" role="img" aria-label="A circuit being probed by a multimeter reading 8.00 volts">
+    <rect class="m-face" width="400" height="260"/>
+    <path class="bt-trace" d="M60 110V60H130M190 60H230V100M230 160V200H60V150"/>
+    <circle class="bt-part" cx="60" cy="130" r="20"/><path class="bt-trace thin" d="M60 117v9M55.5 121.5h9M55.5 139h9"/>
+    <path class="bt-part" d="M130 60l5-9 9 18 9-18 9 18 9-18 9 18 5-9"/>
+    <path class="bt-part" d="M230 100l-9 5 18 9-18 9 18 9-18 9 18 9-9 5"/>
+    <circle class="bt-dot" cx="230" cy="100" r="4"/><circle class="bt-dot" cx="230" cy="200" r="4"/>
+    <path class="bt-red" d="M230 100C262 78 276 92 300 118"/><path class="bt-blk" d="M230 200C262 222 290 222 318 196"/>
+    <rect class="bt-body" x="286" y="44" width="92" height="170" rx="14"/><rect class="bt-case" x="296" y="54" width="72" height="150" rx="7"/>
+    <rect class="bt-lcd" x="303" y="62" width="58" height="36" rx="3"/><text class="bt-digits" x="355" y="88" text-anchor="end">8.00</text>
+    <circle class="bt-knob" cx="332" cy="140" r="17"/><path class="bt-pointer" d="M332 140l-9-11"/>
+    <circle class="bt-jack red" cx="314" cy="186" r="5"/><circle class="bt-jack" cx="332" cy="186" r="5"/><circle class="bt-jack" cx="350" cy="186" r="5"/>
+    <rect class="bt-safe" x="298" y="226" width="68" height="18" rx="9"/><text class="bt-safe-text" x="332" y="239" text-anchor="middle">SAFE</text>
+  </svg>`;
+  return `<a class="bay" href="/tools/circuit"><div class="bezel">${thumb}</div>
+    <div class="bay-body"><div class="label">Tool · DC circuits</div>
+      <h2 class="bay-title">Circuit Bench</h2>
+      <p class="bay-meta">Draw your circuit, probe it with a virtual multimeter, and check the fuse first</p>
+      <span class="bay-go">Open the bench</span></div></a>`;
+}
+
 async function homeView(token) {
   const chapters = await getChapters();
   if (token !== renderToken) return;
@@ -185,7 +208,7 @@ async function homeView(token) {
     ${resumeBanner()}
     <section class="bays" aria-label="Study modules">${chapters.map((c) =>
       (c.type === 'formula' ? formulaCard(c) : c.type === 'problems' ? problemCard(c)
-        : c.type === 'study' ? studyCard(c) : chapterBay(c))).join('')}</section>
+        : c.type === 'study' ? studyCard(c) : chapterBay(c))).join('')}${benchCard()}</section>
     <p class="fine">${canSave ? 'Chapter progress is saved in this browser. Formula drills and problem sets reset when you close the page.'
       : "This browser isn't saving progress (private mode?)."}</p>`;
   bindResume();
