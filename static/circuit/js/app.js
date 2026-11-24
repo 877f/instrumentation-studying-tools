@@ -283,6 +283,22 @@ function example(name) {
   return c;
 }
 
+function clearBoard() {
+  if (!S.circuit.components.length) return;
+  if (S.pending) cancelWire();
+  S.demo = null;
+  commit(() => {
+    S.circuit = createCircuit();
+    S.probes = { red: null, black: null };
+    S.sel = null;
+    S.highlight = new Set();
+  });
+  S.tool = 'select';
+  fit();
+  render();
+  toast('Board cleared. Undo (Ctrl+Z) brings it back.');
+}
+
 /* ================================================================ teacher demo */
 
 function startDemo() {
@@ -420,6 +436,7 @@ function render() {
 function renderToolbar() {
   $('undoBtn').disabled = !S.undo.length;
   $('redoBtn').disabled = !S.redo.length;
+  $('clearBtn').disabled = !S.circuit.components.length;
   $('overlayBtn').setAttribute('aria-pressed', String(S.overlay));
 }
 
@@ -1006,6 +1023,7 @@ async function boot() {
   $('redoBtn').onclick = redo;
   $('overlayBtn').onclick = () => { S.overlay = !S.overlay; save(); render(); };
   $('shareBtn').onclick = share;
+  $('clearBtn').onclick = clearBoard;
   $('fitBtn').onclick = fit;
   $('zoomIn').onclick = () => zoomAt(1.25);
   $('zoomOut').onclick = () => zoomAt(0.8);
@@ -1016,7 +1034,7 @@ async function boot() {
     if (S.circuit.components.length && !window.confirm('Replace the circuit on the board?')) return;
     if (v === 'demo') { startDemo(); return; }
     S.demo = null;
-    commit(() => { S.circuit = v === 'blank' ? createCircuit() : example(v); S.probes = { red: null, black: null }; S.sel = null; });
+    commit(() => { S.circuit = example(v); S.probes = { red: null, black: null }; S.sel = null; });
     fit();
     render();
   };
